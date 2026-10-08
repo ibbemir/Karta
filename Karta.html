@@ -54,8 +54,8 @@
     }
     .login-error { color: #d9534f; font-size: 13px; margin-top: 8px; display: none; }
 
-    /* Modal för ny / redigera installation */
-    #addModal {
+    /* Modal för ny / redigera installation & anteckning */
+    .modal-overlay {
       position: fixed;
       top: 0; left: 0; width: 100vw; height: 100vh;
       background: rgba(0, 0, 0, 0.6);
@@ -310,7 +310,7 @@
   </div>
 
   <!-- Modal för att lägga till/redigera installation -->
-  <div id="addModal">
+  <div id="addModal" class="modal-overlay">
     <div class="modal-box">
       <h3 id="modalTitle">➕ Ny installation</h3>
       <input type="hidden" id="editingId" value="">
@@ -384,6 +384,29 @@
       <div class="modal-buttons">
         <button class="btn-cancel" onclick="closeAddModal()">Avbryt</button>
         <button class="btn-save" onclick="saveNewInstallation()">Spara</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Egen popup-ruta för Snabb-anteckningar -->
+  <div id="quickNoteModal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>➕ Lägg till anteckning</h3>
+      <input type="hidden" id="noteTargetId" value="">
+
+      <div class="modal-field">
+        <label for="noteTechName">Tekniker:</label>
+        <input type="text" id="noteTechName" placeholder="Ditt namn (t.ex. Ibbe)">
+      </div>
+
+      <div class="modal-field">
+        <label for="noteText">Anteckning:</label>
+        <textarea id="noteText" rows="3" placeholder="Skriv din anteckning här..."></textarea>
+      </div>
+
+      <div class="modal-buttons">
+        <button class="btn-cancel" onclick="closeQuickNoteModal()">Avbryt</button>
+        <button class="btn-save" onclick="saveQuickNote()">Spara anteckning</button>
       </div>
     </div>
   </div>
@@ -576,7 +599,7 @@
         (store.hardwareBrand ? '<p style="margin: 3px 0; color: #444;"><b>Märke/Fabrikat:</b> ' + store.hardwareBrand + '</p>' : '') +
         '<p style="margin: 3px 0; color: #444;"><b>Tekniker:</b> ' + (store.technician || 'Ej angivet') + '</p>' +
         notesHtml +
-        '<button onclick="appendQuickNote(\'' + store.id + '\')" style="width: 100%; background: #28a745; color: white; border: none; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 6px; margin-bottom: 6px;">➕ Lägg till anteckning</button>' +
+        '<button onclick="openQuickNoteModal(\'' + store.id + '\')" style="width: 100%; background: #28a745; color: white; border: none; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 6px; margin-bottom: 6px;">➕ Lägg till anteckning</button>' +
         '<a href="' + mapsUrl + '" target="_blank" style="display: block; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 5px; border-radius: 4px; font-weight: bold; font-size: 12px; margin-bottom: 6px;">🚗 Hitta hit (Google Maps)</a>' +
         '<div style="display: flex; gap: 4px;">' +
           '<button onclick="editMarker(\'' + store.id + '\')" style="flex: 1; background:#6c757d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 11px;">✏️ Redigera</button>' +
@@ -588,19 +611,38 @@
       return marker;
     }
 
-    window.appendQuickNote = function(id) {
+    // Öppna modal för snabbanteckning
+    window.openQuickNoteModal = function(id) {
       const item = savedStores.find(s => String(s.id) === String(id));
       if (!item) return;
 
-      const techName = prompt("Ditt namn/tekniker:", item.technician || "") || "Tekniker";
-      const newNoteText = prompt("Skriv din nya anteckning:");
+      document.getElementById('noteTargetId').value = id;
+      document.getElementById('noteTechName').value = item.technician || "Ibbe";
+      document.getElementById('noteText').value = '';
+      document.getElementById('quickNoteModal').style.display = 'flex';
+    };
 
-      if (!newNoteText || !newNoteText.trim()) return;
+    function closeQuickNoteModal() {
+      document.getElementById('quickNoteModal').style.display = 'none';
+    }
+
+    window.saveQuickNote = function() {
+      const id = document.getElementById('noteTargetId').value;
+      const techName = document.getElementById('noteTechName').value.trim() || 'Tekniker';
+      const noteText = document.getElementById('noteText').value.trim();
+
+      if (!noteText) {
+        alert("Skriv in en anteckning först!");
+        return;
+      }
+
+      const item = savedStores.find(s => String(s.id) === String(id));
+      if (!item) return;
 
       const now = new Date();
       const timeStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
       
-      const entry = '• [' + timeStr + ' - ' + techName.trim() + ']: ' + newNoteText.trim();
+      const entry = '• [' + timeStr + ' - ' + techName + ']: ' + noteText;
 
       if (item.notes && String(item.notes).trim()) {
         item.notes = entry + "\n" + String(item.notes).trim();
@@ -609,15 +651,20 @@
       }
 
       localStorage.setItem('myInstalledStoresCache', JSON.stringify(savedStores));
+      closeQuickNoteModal();
       renderMarkers();
+
+      // Öppna igen automatiskt så att användaren ser sin nya anteckning direkt!
+      const activeObj = activeMarkers.find(m => String(m.id) === String(id));
+      if (activeObj) {
+        activeObj.layer.openPopup();
+      }
 
       fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: 'edit', ...item })
-      }).then(() => {
-        setTimeout(loadSavedStores, 1500);
       });
     };
 
@@ -890,8 +937,6 @@
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: actionType, ...storeToSave })
-      }).then(() => {
-        setTimeout(loadSavedStores, 1500);
       });
     }
 
@@ -992,8 +1037,6 @@
           mode: 'no-cors',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'delete', id: id })
-        }).then(() => {
-          setTimeout(loadSavedStores, 1500);
         });
       }
     };
