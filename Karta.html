@@ -213,7 +213,20 @@
       font-weight: bold;
       font-size: 12px;
       cursor: pointer;
-      margin-top: 8px;
+      margin-top: 6px;
+    }
+
+    .btn-sync {
+      width: 100%;
+      background: #6f42c1;
+      color: white;
+      border: none;
+      padding: 8px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 12px;
+      cursor: pointer;
+      margin-top: 6px;
     }
 
     .legend-grid { display: grid; grid-template-columns: 1fr; gap: 4px; }
@@ -451,6 +464,7 @@
           <button class="quick-filter-btn" onclick="setQuickFilter('lås', this)">Lås</button>
         </div>
 
+        <button class="btn-sync" onclick="forceSyncFromSheet()">🔄 Synka / Rensa minne</button>
         <button class="btn-export" onclick="exportToCSV()">📥 Exportera till CSV (Excel)</button>
       </div>
       <hr>
@@ -473,9 +487,10 @@
   <script>
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz8-AmljzLJ1k23vVAKuHarQQKX_5jmpNBh6jjOXsJKpSsi504PXjj8_z8Ni8QWsPEF/exec";
     const APP_PASSWORD = "Seesafe2026";
+    const CACHE_KEY = "myInstalledStoresCache_v2";
 
     let map = null;
-    let savedStores = JSON.parse(localStorage.getItem('myInstalledStoresCache')) || [];
+    let savedStores = JSON.parse(localStorage.getItem(CACHE_KEY)) || [];
     let searchMarker = null;
     let activeMarkers = [];
     let pendingCoords = null;
@@ -498,6 +513,9 @@
     }
 
     window.addEventListener('DOMContentLoaded', () => {
+      // Rensa gamla versioner av cache
+      localStorage.removeItem('myInstalledStoresCache');
+      
       if (localStorage.getItem('map_auth_token') === APP_PASSWORD) {
         unlockMap();
       }
@@ -611,7 +629,6 @@
       return marker;
     }
 
-    // Öppna modal för snabbanteckning
     window.openQuickNoteModal = function(id) {
       const item = savedStores.find(s => String(s.id) === String(id));
       if (!item) return;
@@ -650,11 +667,10 @@
         item.notes = entry;
       }
 
-      localStorage.setItem('myInstalledStoresCache', JSON.stringify(savedStores));
+      localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
       closeQuickNoteModal();
       renderMarkers();
 
-      // Öppna igen automatiskt så att användaren ser sin nya anteckning direkt!
       const activeObj = activeMarkers.find(m => String(m.id) === String(id));
       if (activeObj) {
         activeObj.layer.openPopup();
@@ -694,6 +710,12 @@
       updateStoreFilterList();
       updateStatistics();
       filterStores();
+    }
+
+    function forceSyncFromSheet() {
+      localStorage.removeItem(CACHE_KEY);
+      loadSavedStores();
+      alert("Minnet har rensats och kartan har synkats på nytt med kalkylarket!");
     }
 
     function updateStatistics() {
@@ -775,12 +797,12 @@
     }
 
     function loadSavedStores() {
-      fetch(GOOGLE_SCRIPT_URL)
+      fetch(GOOGLE_SCRIPT_URL + "?t=" + Date.now())
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) {
             savedStores = data;
-            localStorage.setItem('myInstalledStoresCache', JSON.stringify(savedStores));
+            localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
             renderMarkers();
           }
         })
@@ -921,7 +943,7 @@
         savedStores.push(newStore);
       }
 
-      localStorage.setItem('myInstalledStoresCache', JSON.stringify(savedStores));
+      localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
       renderMarkers();
 
       if (searchMarker) {
@@ -1029,7 +1051,7 @@
     window.removeMarker = function(id) {
       if (confirm("Vill du ta bort den här markeringen?")) {
         savedStores = savedStores.filter(s => String(s.id) !== String(id));
-        localStorage.setItem('myInstalledStoresCache', JSON.stringify(savedStores));
+        localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
         renderMarkers();
 
         fetch(GOOGLE_SCRIPT_URL, {
