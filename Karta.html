@@ -487,7 +487,7 @@
   <script>
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz8-AmljzLJ1k23vVAKuHarQQKX_5jmpNBh6jjOXsJKpSsi504PXjj8_z8Ni8QWsPEF/exec";
     const APP_PASSWORD = "Seesafe2026";
-    const CACHE_KEY = "myInstalledStoresCache_v4";
+    const CACHE_KEY = "myInstalledStoresCache_v5";
 
     let map = null;
     let savedStores = JSON.parse(localStorage.getItem(CACHE_KEY)) || [];
@@ -677,13 +677,32 @@
         activeObj.layer.openPopup();
       }
 
+      sendToGoogleSheets('edit', item);
+    };
+
+    function sendToGoogleSheets(actionType, storeData) {
+      // Skicka alla fält explicit så att inga kolumner förskjuts i Sheets
+      const payload = {
+        action: actionType,
+        id: String(storeData.id || ''),
+        lat: String(storeData.lat || ''),
+        lng: String(storeData.lng || ''),
+        brand: String(storeData.brand || ''),
+        customName: String(storeData.customName || ''),
+        city: String(storeData.city || ''),
+        installType: String(storeData.installType || ''),
+        hardwareBrand: String(storeData.hardwareBrand || ''),
+        technician: String(storeData.technician || ''),
+        notes: String(storeData.notes || '')
+      };
+
       fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'edit', ...item })
+        body: JSON.stringify(payload)
       });
-    };
+    }
 
     function renderMarkers() {
       if (!map) return;
@@ -698,7 +717,7 @@
         activeMarkers.push({ 
           id: store.id, 
           brand: displayBrand, 
-          customName: store.customName || '',
+          customName: store.customName || store.costumName || '',
           city: store.city || '',
           installType: store.installType || '',
           hardwareBrand: store.hardwareBrand || '',
@@ -801,7 +820,10 @@
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) {
-            savedStores = data;
+            savedStores = data.map(item => ({
+              ...item,
+              customName: item.customName || item.costumName || ''
+            }));
             localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
             renderMarkers();
           }
@@ -844,7 +866,7 @@
         document.getElementById('modalCustomBrand').value = item.brand || '';
       }
 
-      document.getElementById('modalName').value = item.customName || '';
+      document.getElementById('modalName').value = item.customName || item.costumName || '';
       document.getElementById('modalCity').value = item.city || '';
 
       const stdTypes = ["Larm", "Kamera", "Passer", "Lås", "Larm & Kamera", "Larm & Passer", "Kamera & Passer", "Passer & Lås", "Komplett (Larm, Kamera, Passer & Lås)"];
@@ -954,12 +976,7 @@
       closeAddModal();
 
       const storeToSave = savedStores.find(s => String(s.id) === String(editId || savedStores[savedStores.length - 1].id));
-      fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: actionType, ...storeToSave })
-      });
+      sendToGoogleSheets(actionType, storeToSave);
     }
 
     function exportToCSV() {
@@ -974,7 +991,7 @@
       savedStores.forEach(s => {
         const row = [
           `"${s.brand || ''}"`,
-          `"${s.customName || ''}"`,
+          `"${s.customName || s.costumName || ''}"`,
           `"${s.city || ''}"`,
           `"${s.installType || ''}"`,
           `"${s.hardwareBrand || ''}"`,
