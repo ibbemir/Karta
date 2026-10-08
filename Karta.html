@@ -1,93 +1,1115 @@
-function doGet(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var data = sheet.getDataRange().getValues();
-  if (data.length <= 1) {
-    return ContentService.createTextOutput(JSON.stringify([]))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mina Larm- & Butiksinstallationer</title>
   
-  var result = [];
-  for (var i = 1; i < data.length; i++) {
-    var row = data[i];
-    if (!row[0]) continue;
-    
-    // Rensa bort enkelfnuttar och formateringsfel från lat/lng
-    var latVal = String(row[1] || "").replace("'", "").replace(',', '.');
-    var lngVal = String(row[2] || "").replace("'", "").replace(',', '.');
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f0f2f5; }
+    #map { height: 100vh; width: 100vw; display: none; }
 
-    result.push({
-      id: String(row[0]),
-      lat: latVal,
-      lng: lngVal,
-      brand: String(row[3] || ""),
-      customName: String(row[4] || ""),
-      city: String(row[5] || ""),
-      installType: String(row[6] || ""),
-      hardwareBrand: String(row[7] || ""),
-      technician: String(row[8] || ""),
-      notes: String(row[9] || "")
+    /* Lösenordsskärm */
+    #loginOverlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    }
+    .login-box {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      text-align: center;
+      max-width: 320px;
+      width: 90%;
+    }
+    .login-box h2 { margin-top: 0; font-size: 18px; color: #333; }
+    .login-box input {
+      width: 100%;
+      padding: 10px;
+      margin: 12px 0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 16px;
+      text-align: center;
+    }
+    .login-box button {
+      width: 100%;
+      padding: 10px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .login-error { color: #d9534f; font-size: 13px; margin-top: 8px; display: none; }
+
+    /* Modaler */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.6);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 10001;
+    }
+    .modal-box {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 380px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .modal-box h3 { margin-top: 0; margin-bottom: 14px; font-size: 16px; text-align: center; color: #333; }
+    .modal-field { margin-bottom: 12px; }
+    .modal-field label { display: block; font-size: 12px; font-weight: bold; color: #555; margin-bottom: 4px; }
+    .modal-field select, .modal-field input, .modal-field textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .modal-buttons { display: flex; gap: 8px; margin-top: 16px; }
+    .modal-buttons button {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn-save { background: #28a745; color: white; }
+    .btn-cancel { background: #6c757d; color: white; }
+
+    /* Kartsök och menyer */
+    .search-container { 
+      position: absolute; 
+      top: 10px; 
+      left: 10px; 
+      right: 10px;
+      z-index: 1000; 
+      max-width: 400px;
+    }
+    .search-box { 
+      display: flex; 
+      background: white; 
+      padding: 6px; 
+      border-radius: 8px; 
+      box-shadow: 0 2px 10px rgba(0,0,0,0.25); 
+      gap: 6px; 
+    }
+    .search-box input { 
+      flex: 1; 
+      padding: 8px; 
+      border: 1px solid #ccc; 
+      border-radius: 6px; 
+      font-size: 14px; 
+      outline: none; 
+    }
+    .search-box button { 
+      padding: 8px 14px; 
+      background: #007bff; 
+      color: white; 
+      border: none; 
+      border-radius: 6px; 
+      cursor: pointer; 
+      font-weight: bold; 
+      font-size: 14px;
+    }
+    .suggestions-list { 
+      background: white; 
+      border-radius: 8px; 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
+      margin-top: 4px; 
+      max-height: 200px; 
+      overflow-y: auto; 
+      display: none; 
+      padding: 0; 
+      list-style: none; 
+    }
+    .suggestions-list li { 
+      padding: 10px 12px; 
+      border-bottom: 1px solid #eee; 
+      cursor: pointer; 
+      font-size: 13px; 
+      color: #333; 
+    }
+
+    .info-box { 
+      position: absolute; 
+      top: 10px; 
+      right: 10px; 
+      z-index: 1000; 
+      background: white; 
+      padding: 12px 14px; 
+      border-radius: 10px; 
+      box-shadow: 0 2px 12px rgba(0,0,0,0.25); 
+      width: 270px;
+      max-height: 85vh;
+      overflow-y: auto;
+      transition: all 0.3s ease;
+    }
+    .info-box h3 { margin-top: 0; margin-bottom: 6px; font-size: 14px; }
+    .filter-section { margin-bottom: 8px; }
+    .filter-section select { 
+      width: 100%; 
+      padding: 8px; 
+      border-radius: 6px; 
+      border: 1px solid #ccc; 
+      font-size: 13px; 
+      background: #fff;
+    }
+
+    .quick-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .quick-filter-btn {
+      background: #e9ecef;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      font-weight: 500;
+      color: #495057;
+      flex: 1 1 calc(50% - 4px);
+      text-align: center;
+    }
+    .quick-filter-btn.active {
+      background: #007bff;
+      color: white;
+      border-color: #0056b3;
+      font-weight: bold;
+    }
+
+    .btn-export {
+      width: 100%;
+      background: #17a2b8;
+      color: white;
+      border: none;
+      padding: 8px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 12px;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    .btn-sync {
+      width: 100%;
+      background: #6f42c1;
+      color: white;
+      border: none;
+      padding: 8px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 12px;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    .legend-grid { display: grid; grid-template-columns: 1fr; gap: 4px; }
+    .legend-item { display: flex; align-items: center; font-size: 12px; }
+    .color-dot { 
+      width: 14px; 
+      height: 14px; 
+      border-radius: 50%; 
+      margin-right: 8px; 
+      display: inline-block; 
+      border: 1px solid #ccc; 
+      box-sizing: border-box; 
+      flex-shrink: 0; 
+    }
+    .color-dot.dollarstore { background: linear-gradient(90deg, #ffd700 50%, #ff4d4d 50%); }
+
+    .stats-container {
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+    }
+    .stats-title {
+      font-size: 12px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .stats-list {
+      font-size: 11px;
+      color: #555;
+      max-height: 120px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .stats-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 0;
+      border-bottom: 1px dashed #eee;
+    }
+    .stats-item:last-child { border-bottom: none; }
+
+    .toggle-panel-btn {
+      display: none;
+      width: 100%;
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      padding: 6px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    @media (max-width: 600px) {
+      .search-container { top: 10px; left: 10px; right: 10px; max-width: none; }
+      .info-box {
+        top: auto;
+        bottom: 15px;
+        left: 10px;
+        right: 10px;
+        width: auto;
+        max-height: 45vh;
+        padding: 10px;
+        border-radius: 12px;
+      }
+      .toggle-panel-btn { display: block; }
+      .panel-content.collapsed { display: none; }
+      .legend-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+      hr { margin: 6px 0; }
+    }
+
+    .custom-svg-icon { background: none; border: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Lösenordsvy -->
+  <div id="loginOverlay">
+    <div class="login-box">
+      <h2>🔒 Behörighet krävs</h2>
+      <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Ange lösenord för att visa installationskartan</p>
+      <input type="password" id="passwordInput" placeholder="Lösenord..." onkeypress="if(event.key==='Enter') checkPassword()">
+      <button onclick="checkPassword()">Lås upp kartan</button>
+      <div id="loginError" class="login-error">Fel lösenord, försök igen!</div>
+    </div>
+  </div>
+
+  <!-- Modal för ny/redigera installation -->
+  <div id="addModal" class="modal-overlay">
+    <div class="modal-box">
+      <h3 id="modalTitle">➕ Ny installation</h3>
+      <input type="hidden" id="editingId" value="">
+
+      <div class="modal-field">
+        <label for="modalCategory">1. Välj typ / kedja:</label>
+        <select id="modalCategory" onchange="handleCategoryChange()">
+          <option value="Jysk">Jysk</option>
+          <option value="Normal">Normal</option>
+          <option value="Rusta">Rusta</option>
+          <option value="Dollarstore">Dollarstore</option>
+          <option value="Thansen">Thansen</option>
+          <option value="Granngården">Granngården</option>
+          <option value="Privatpersoner">Privatpersoner</option>
+          <option value="Övriga företag">Övriga företag</option>
+          <option value="CUSTOM">-- Annat (Skriv eget) --</option>
+        </select>
+      </div>
+
+      <div class="modal-field" id="customBrandGroup" style="display: none;">
+        <label for="modalCustomBrand">Ange egen kedja/kategori:</label>
+        <input type="text" id="modalCustomBrand" placeholder="t.ex. Apotek...">
+      </div>
+
+      <div class="modal-field">
+        <label for="modalName">Namn / Företagsnamn (valfritt):</label>
+        <input type="text" id="modalName" placeholder="t.ex. Börje Jönsson, Jysk Syd...">
+      </div>
+
+      <div class="modal-field">
+        <label for="modalCity">Stad:</label>
+        <input type="text" id="modalCity" placeholder="t.ex. Landskrona">
+      </div>
+
+      <div class="modal-field">
+        <label for="modalInstallType">2. Typ av installation:</label>
+        <select id="modalInstallType" onchange="handleInstallTypeChange()">
+          <option value="Larm">🛡️ Larm</option>
+          <option value="Kamera">📷 Kamera</option>
+          <option value="Passer">🔑 Passer</option>
+          <option value="Lås">🔒 Lås</option>
+          <option value="Larm & Kamera">🛡️📷 Larm & Kamera</option>
+          <option value="Larm & Passer">🛡️🔑 Larm & Passer</option>
+          <option value="Kamera & Passer">📷🔑 Kamera & Passer</option>
+          <option value="Passer & Lås">🔑🔒 Passer & Lås</option>
+          <option value="Komplett (Larm, Kamera, Passer & Lås)">🛡️📷🔑🔒 Komplett system</option>
+          <option value="CUSTOM_TYPE">-- Annat (Skriv eget) --</option>
+        </select>
+      </div>
+
+      <div class="modal-field" id="customTypeGroup" style="display: none;">
+        <label for="modalCustomInstallType">Ange egen installationstyp:</label>
+        <input type="text" id="modalCustomInstallType" placeholder="t.ex. Dimmaskin, Brandlarm...">
+      </div>
+
+      <div class="modal-field">
+        <label for="modalHardwareBrand">Fabrikat / Modell (märke på utrustning):</label>
+        <input type="text" id="modalHardwareBrand" placeholder="t.ex. Hikvision, DSC Neo, Paxton, STEP Lock...">
+      </div>
+
+      <div class="modal-field">
+        <label for="modalTechnician">Tekniker:</label>
+        <input type="text" id="modalTechnician" placeholder="t.ex. Ibbe">
+      </div>
+
+      <div class="modal-field">
+        <label for="modalNotes">Anteckningar / LC-ID / Koder:</label>
+        <textarea id="modalNotes" rows="3" placeholder="Särskilda instruktioner, abonnemangsnummer, sektioner etc..."></textarea>
+      </div>
+
+      <div class="modal-buttons">
+        <button class="btn-cancel" onclick="closeAddModal()">Avbryt</button>
+        <button class="btn-save" onclick="saveNewInstallation()">Spara</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal för Anteckningar -->
+  <div id="quickNoteModal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>📋 Anteckningar & Logg</h3>
+      <input type="hidden" id="noteTargetId" value="">
+
+      <div id="existingNotesContainer" style="background: #fff8dc; border-left: 3px solid #f0ad4e; padding: 8px; margin-bottom: 12px; font-size: 12px; max-height: 150px; overflow-y: auto; display: none; color: #333;">
+      </div>
+
+      <div class="modal-field">
+        <label for="noteTechName">Tekniker (Ditt namn):</label>
+        <input type="text" id="noteTechName" placeholder="Ibbe">
+      </div>
+
+      <div class="modal-field">
+        <label for="noteText">Ny anteckning:</label>
+        <textarea id="noteText" rows="3" placeholder="Skriv din anteckning här..."></textarea>
+      </div>
+
+      <div class="modal-buttons">
+        <button class="btn-cancel" onclick="closeQuickNoteModal()">Stäng</button>
+        <button class="btn-save" onclick="saveQuickNote()">Spara anteckning</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="search-container">
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="Sök adress, tekniker, modell, typ..." oninput="handleSearchInput()" onkeypress="if(event.key === 'Enter') performSearch()">
+      <button onclick="performSearch()">Sök</button>
+    </div>
+    <ul id="suggestions" class="suggestions-list"></ul>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="info-box">
+    <button class="toggle-panel-btn" onclick="togglePanel()">📋 Visa/Dölj Filter & Meny</button>
+    
+    <div id="panelContent" class="panel-content">
+      <div class="stats-container">
+        <div class="stats-title">
+          <span>📊 Statistik:</span>
+          <span id="totalCountBadge" style="color: #007bff;">Totalt: 0</span>
+        </div>
+        <div id="statsList" class="stats-list">
+          <div style="text-align: center; color: #999; padding: 4px;">Laddar...</div>
+        </div>
+      </div>
+
+      <div class="filter-section">
+        <label for="storeFilter" style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 4px;">Visa kedja/butik:</label>
+        <select id="storeFilter" onchange="filterStores()">
+          <option value="ALL">-- Visa alla installationer --</option>
+        </select>
+
+        <label style="font-weight: bold; font-size: 12px; display: block; margin-top: 8px; margin-bottom: 4px;">Snabbfilter typ:</label>
+        <div class="quick-filters">
+          <button class="quick-filter-btn active" onclick="setQuickFilter('ALL', this)">Alla</button>
+          <button class="quick-filter-btn" onclick="setQuickFilter('larm', this)">Larm</button>
+          <button class="quick-filter-btn" onclick="setQuickFilter('kamera', this)">Kamera</button>
+          <button class="quick-filter-btn" onclick="setQuickFilter('passer', this)">Passer</button>
+          <button class="quick-filter-btn" onclick="setQuickFilter('lås', this)">Lås</button>
+        </div>
+
+        <button class="btn-sync" onclick="forceSyncFromSheet()">🔄 Synka med Google Sheets</button>
+        <button class="btn-export" onclick="exportToCSV()">📥 Exportera till CSV (Excel)</button>
+      </div>
+      <hr>
+      <h3>Färgkodning</h3>
+      <div class="legend-grid">
+        <div class="legend-item"><span class="color-dot" style="background: #1e90ff;"></span> Jysk</div>
+        <div class="legend-item"><span class="color-dot" style="background: #40e0d0;"></span> Normal</div>
+        <div class="legend-item"><span class="color-dot" style="background: #ffd700;"></span> Rusta</div>
+        <div class="legend-item"><span class="color-dot dollarstore"></span> Dollarstore</div>
+        <div class="legend-item"><span class="color-dot" style="background: #00008b;"></span> Thansen</div>
+        <div class="legend-item"><span class="color-dot" style="background: #8b4513;"></span> Granngården</div>
+        <div class="legend-item"><span class="color-dot" style="background: #ffffff; border-color: #999;"></span> Privatpersoner</div>
+        <div class="legend-item"><span class="color-dot" style="background: #888888;"></span> Övriga företag</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <script>
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz8-AmljzLJ1k23vVAKuHarQQKX_5jmpNBh6jjOXsJKpSsi504PXjj8_z8Ni8QWsPEF/exec";
+    const APP_PASSWORD = "Seesafe2026";
+    const CACHE_KEY = "myInstalledStoresCache_v9";
+
+    let map = null;
+    let savedStores = JSON.parse(localStorage.getItem(CACHE_KEY)) || [];
+    let searchMarker = null;
+    let activeMarkers = [];
+    let pendingCoords = null;
+    let activeTypeFilter = 'ALL';
+
+    function checkPassword() {
+      const input = document.getElementById('passwordInput').value;
+      if (input === APP_PASSWORD) {
+        localStorage.setItem('map_auth_token', APP_PASSWORD);
+        unlockMap();
+      } else {
+        document.getElementById('loginError').style.display = 'block';
+      }
+    }
+
+    function unlockMap() {
+      document.getElementById('loginOverlay').style.display = 'none';
+      document.getElementById('map').style.display = 'block';
+      initMap();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      if (localStorage.getItem('map_auth_token') === APP_PASSWORD) {
+        unlockMap();
+      }
     });
-  }
-  
-  return ContentService.createTextOutput(JSON.stringify(result))
-    .setMimeType(ContentService.MimeType.JSON);
-}
 
-function doPost(e) {
-  try {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    var contents = JSON.parse(e.postData.contents);
-    var action = contents.action;
-    
-    var data = sheet.getDataRange().getValues();
-    
-    // Säkerställ rubrikraden
-    var targetHeaders = ["id", "lat", "lng", "brand", "customName", "city", "installType", "hardwareBrand", "technician", "notes"];
-    sheet.getRange(1, 1, 1, targetHeaders.length).setValues([targetHeaders]);
+    function parseCoord(val) {
+      if (typeof val === 'number') return val;
+      if (!val) return 0;
+      return parseFloat(String(val).replace("'", "").replace(',', '.'));
+    }
 
-    var rowIndex = -1;
-    for (var i = 1; i < data.length; i++) {
-      var idInSheet = String(data[i][0]).replace("'", "").trim();
-      var searchId = String(contents.id).replace("'", "").trim();
-      if (idInSheet === searchId) {
-        rowIndex = i + 1;
-        break;
+    function initMap() {
+      if (map) return;
+
+      map = L.map('map', { zoomControl: false }).setView([56.0, 13.5], 6);
+
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+        attribution: 'Tiles &copy; Esri'
+      }).addTo(map);
+
+      map.on('click', function(e) { openAddModal(e.latlng.lat, e.latlng.lng); });
+
+      loadSavedStores();
+    }
+
+    function togglePanel() {
+      document.getElementById('panelContent').classList.toggle('collapsed');
+    }
+
+    function getStoreColor(brandName) {
+      const name = (brandName || "").toLowerCase().trim();
+      if (name.includes("jysk")) return { type: 'solid', color: '#1e90ff' };
+      if (name.includes("normal")) return { type: 'solid', color: '#40e0d0' };
+      if (name.includes("rusta")) return { type: 'solid', color: '#ffd700' };
+      if (name.includes("dollarstore") || name.includes("dollar store")) return { type: 'split', color1: '#ffd700', color2: '#ff4d4d' };
+      if (name.includes("thansen") || name.includes("t.hansen") || name.includes("t hansen")) return { type: 'solid', color: '#00008b' };
+      if (name.includes("granngården") || name.includes("granngarden")) return { type: 'solid', color: '#8b4513' };
+      if (name.includes("privat") || name.includes("privatperson")) return { type: 'solid', color: '#ffffff' };
+      return { type: 'solid', color: '#888888' };
+    }
+
+    function getTypeSymbol(installType) {
+      const type = (installType || "").toLowerCase();
+      let symbols = "";
+      if (type.includes("larm") || type.includes("inbrott")) symbols += "🛡️";
+      if (type.includes("kamera") || type.includes("cctv")) symbols += "📷";
+      if (type.includes("passer")) symbols += "🔑";
+      if (type.includes("lås")) symbols += "🔒";
+      return symbols;
+    }
+
+    function createMarkerIcon(brandName, installType) {
+      const style = getStoreColor(brandName);
+      const symbol = getTypeSymbol(installType);
+
+      let innerContent = symbol 
+        ? `<text x="11" y="15" font-size="9" text-anchor="middle">${symbol}</text>` 
+        : ``;
+
+      let svgHtml = '';
+      if (style.type === 'split') {
+        svgHtml = `<svg width="24" height="24" viewBox="0 0 22 22">
+          <circle cx="11" cy="11" r="9" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+          <path d="M 11,2 A 9,9 0 0,0 11,20 Z" fill="${style.color1}" />
+          <path d="M 11,2 A 9,9 0 0,1 11,20 Z" fill="${style.color2}" />
+          <circle cx="11" cy="11" r="9" fill="none" stroke="#ffffff" stroke-width="2"/>
+          ${innerContent}
+        </svg>`;
+      } else {
+        svgHtml = `<svg width="24" height="24" viewBox="0 0 22 22">
+          <circle cx="11" cy="11" r="9" fill="${style.color}" stroke="#ffffff" stroke-width="2"/>
+          ${innerContent}
+        </svg>`;
+      }
+      return L.divIcon({ html: svgHtml, className: 'custom-svg-icon', iconSize: [24, 24], iconAnchor: [12, 12] });
+    }
+
+    function createCustomMarker(store) {
+      const latNum = parseCoord(store.lat);
+      const lngNum = parseCoord(store.lng);
+
+      if (!latNum || !lngNum) return null;
+
+      const icon = createMarkerIcon(store.brand, store.installType);
+      const marker = L.marker([latNum, lngNum], { icon: icon }).addTo(map);
+
+      let displayName = store.customName || store.brand || "Installation";
+      if (store.customName && store.brand && store.brand !== store.customName && store.brand !== "Övriga företag") {
+        displayName = store.brand + " – " + store.customName;
+      }
+
+      const mapsUrl = "https://www.google.com/maps/dir/?api=1&destination=" + latNum + "," + lngNum;
+
+      const hasNotes = store.notes && String(store.notes).trim() !== '';
+
+      let noteBtnStyle = hasNotes 
+        ? 'background: #f0ad4e; color: black;' 
+        : 'background: #28a745; color: white;';
+      let noteBtnText = hasNotes 
+        ? '✅ Anteckningar (Finns sparade)' 
+        : '➕ Lägg till anteckning';
+
+      const popupContent = '<div style="font-size: 13px; min-width: 190px;">' +
+        '<b style="font-size: 14px;">' + displayName + '</b> ' + (store.city ? '(' + store.city + ')' : '') + '<br>' +
+        '<p style="margin: 3px 0; color: #666; font-size: 11px;"><b>Kategori:</b> ' + (store.brand || 'Övriga företag') + '</p>' +
+        '<p style="margin: 3px 0; color: #444;"><b>Installation:</b> ' + (store.installType || 'Ej angivet') + '</p>' +
+        (store.hardwareBrand ? '<p style="margin: 3px 0; color: #444;"><b>Märke/Fabrikat:</b> ' + store.hardwareBrand + '</p>' : '') +
+        '<p style="margin: 3px 0; color: #444;"><b>Tekniker:</b> ' + (store.technician || 'Ej angivet') + '</p>' +
+        '<button onclick="openQuickNoteModal(\'' + store.id + '\')" style="width: 100%; ' + noteBtnStyle + ' border: none; padding: 7px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 6px; margin-bottom: 6px;">' + noteBtnText + '</button>' +
+        '<a href="' + mapsUrl + '" target="_blank" style="display: block; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 5px; border-radius: 4px; font-weight: bold; font-size: 12px; margin-bottom: 6px;">🚗 Hitta hit (Google Maps)</a>' +
+        '<div style="display: flex; gap: 4px;">' +
+          '<button onclick="editMarker(\'' + store.id + '\')" style="flex: 1; background:#6c757d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 11px;">✏️ Redigera</button>' +
+          '<button onclick="removeMarker(\'' + store.id + '\')" style="flex: 1; background:#ff4d4d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 11px;">Ta bort</button>' +
+        '</div>' +
+      '</div>';
+
+      marker.bindPopup(popupContent);
+      return marker;
+    }
+
+    window.openQuickNoteModal = function(id) {
+      const item = savedStores.find(s => String(s.id) === String(id));
+      if (!item) return;
+
+      document.getElementById('noteTargetId').value = id;
+      document.getElementById('noteTechName').value = item.technician || "Ibbe";
+      document.getElementById('noteText').value = '';
+
+      const container = document.getElementById('existingNotesContainer');
+      if (item.notes && String(item.notes).trim() !== '') {
+        container.innerHTML = '<b>Tidigare anteckningar:</b><br>' + String(item.notes).trim().replace(/\n/g, '<br>');
+        container.style.display = 'block';
+      } else {
+        container.style.display = 'none';
+      }
+
+      document.getElementById('quickNoteModal').style.display = 'flex';
+    };
+
+    function closeQuickNoteModal() {
+      document.getElementById('quickNoteModal').style.display = 'none';
+    }
+
+    window.saveQuickNote = function() {
+      const id = document.getElementById('noteTargetId').value;
+      const techName = document.getElementById('noteTechName').value.trim() || 'Tekniker';
+      const noteText = document.getElementById('noteText').value.trim();
+
+      const item = savedStores.find(s => String(s.id) === String(id));
+      if (!item) return;
+
+      if (noteText) {
+        const now = new Date();
+        const timeStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+        const entry = '• [' + timeStr + ' - ' + techName + ']: ' + noteText;
+
+        if (item.notes && String(item.notes).trim()) {
+          item.notes = entry + "\n" + String(item.notes).trim();
+        } else {
+          item.notes = entry;
+        }
+      }
+
+      localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
+      closeQuickNoteModal();
+      renderMarkers();
+
+      const activeObj = activeMarkers.find(m => String(m.id) === String(id));
+      if (activeObj) {
+        activeObj.layer.openPopup();
+      }
+
+      sendToGoogleSheets('edit', item);
+    };
+
+    function sendToGoogleSheets(actionType, storeData) {
+      // Skicka med ALLA fält explicita så inget förskjuts
+      const payload = {
+        action: actionType,
+        id: String(storeData.id || ''),
+        lat: String(storeData.lat || '').replace(',', '.'),
+        lng: String(storeData.lng || '').replace(',', '.'),
+        brand: String(storeData.brand || ''),
+        customName: String(storeData.customName || storeData.costumName || ''),
+        city: String(storeData.city || ''),
+        installType: String(storeData.installType || ''),
+        hardwareBrand: String(storeData.hardwareBrand || ''),
+        technician: String(storeData.technician || ''),
+        notes: String(storeData.notes || '')
+      };
+
+      fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+    }
+
+    function renderMarkers() {
+      if (!map) return;
+      activeMarkers.forEach(m => map.removeLayer(m.layer));
+      activeMarkers = [];
+
+      savedStores.forEach(store => {
+        let displayBrand = store.brand;
+        if (displayBrand === "T.Hansen") displayBrand = "Thansen";
+
+        const m = createCustomMarker(store);
+        if (m) {
+          activeMarkers.push({ 
+            id: store.id, 
+            brand: displayBrand, 
+            customName: store.customName || store.costumName || '',
+            city: store.city || '',
+            installType: store.installType || '',
+            hardwareBrand: store.hardwareBrand || '',
+            technician: store.technician || '',
+            notes: store.notes || '',
+            layer: m 
+          });
+        }
+      });
+
+      updateStoreFilterList();
+      updateStatistics();
+      filterStores();
+    }
+
+    function forceSyncFromSheet() {
+      loadSavedStores();
+      alert("Hämtar senaste informationen från Google Sheets...");
+    }
+
+    function updateStatistics() {
+      const statsList = document.getElementById('statsList');
+      const totalBadge = document.getElementById('totalCountBadge');
+      
+      totalBadge.textContent = 'Totalt: ' + savedStores.length;
+
+      if (savedStores.length === 0) {
+        statsList.innerHTML = '<div style="text-align: center; color: #999; padding: 4px;">Inga installationer ännu.</div>';
+        return;
+      }
+
+      const brandCounts = {};
+      savedStores.forEach(store => {
+        let brand = (store.brand || "Övriga företag").trim();
+        if (brand === "T.Hansen") brand = "Thansen";
+        brandCounts[brand] = (brandCounts[brand] || 0) + 1;
+      });
+
+      const sortedBrands = Object.entries(brandCounts).sort((a, b) => b[1] - a[1]);
+
+      let html = '';
+      sortedBrands.forEach(([brand, count]) => {
+        html += '<div class="stats-item"><span>' + brand + '</span><b style="color: #333;">' + count + ' st</b></div>';
+      });
+
+      statsList.innerHTML = html;
+    }
+
+    function updateStoreFilterList() {
+      const select = document.getElementById('storeFilter');
+      const currentValue = select.value;
+      
+      select.innerHTML = '<option value="ALL">-- Visa alla installationer --</option>';
+
+      const standardCategories = ["Jysk", "Normal", "Rusta", "Dollarstore", "Thansen", "Granngården", "Privatpersoner", "Övriga företag"];
+      const savedBrands = savedStores.map(s => s.brand === "T.Hansen" ? "Thansen" : s.brand).filter(Boolean);
+      const allBrands = [...new Set([...standardCategories, ...savedBrands])].sort();
+
+      allBrands.forEach(brandName => {
+        const option = document.createElement('option');
+        option.value = brandName;
+        option.textContent = brandName;
+        select.appendChild(option);
+      });
+
+      select.value = currentValue;
+    }
+
+    function setQuickFilter(type, btnElem) {
+      activeTypeFilter = type;
+      document.querySelectorAll('.quick-filter-btn').forEach(btn => btn.classList.remove('active'));
+      btnElem.classList.add('active');
+      filterStores();
+    }
+
+    function filterStores() {
+      const selectedStore = document.getElementById('storeFilter').value;
+      const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
+
+      activeMarkers.forEach(item => {
+        const matchesBrand = (selectedStore === 'ALL' || item.brand === selectedStore);
+        const matchesType = (activeTypeFilter === 'ALL' || item.installType.toLowerCase().includes(activeTypeFilter));
+        const fullText = (item.brand + ' ' + item.customName + ' ' + item.city + ' ' + item.installType + ' ' + item.hardwareBrand + ' ' + item.technician + ' ' + item.notes).toLowerCase();
+        const matchesSearch = (!searchVal || fullText.includes(searchVal));
+
+        if (matchesBrand && matchesType && matchesSearch) {
+          map.addLayer(item.layer);
+        } else {
+          map.removeLayer(item.layer);
+        }
+      });
+    }
+
+    function handleSearchInput() {
+      filterStores();
+      fetchSuggestions();
+    }
+
+    function loadSavedStores() {
+      fetch(GOOGLE_SCRIPT_URL + "?t=" + Date.now())
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            savedStores = data.map(item => ({
+              ...item,
+              lat: parseCoord(item.lat),
+              lng: parseCoord(item.lng),
+              customName: item.customName || item.costumName || ''
+            }));
+            localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
+            renderMarkers();
+          }
+        })
+        .catch(err => console.error("Kunde inte synka med Google Sheets:", err));
+    }
+
+    function openAddModal(lat, lng, defaultCity = "") {
+      pendingCoords = { lat: parseCoord(lat), lng: parseCoord(lng) };
+      document.getElementById('editingId').value = '';
+      document.getElementById('modalTitle').textContent = '➕ Ny installation';
+      document.getElementById('modalCategory').value = 'Jysk';
+      document.getElementById('modalCustomBrand').value = '';
+      document.getElementById('modalName').value = '';
+      document.getElementById('modalCity').value = defaultCity;
+      document.getElementById('modalInstallType').value = 'Larm';
+      document.getElementById('modalCustomInstallType').value = '';
+      document.getElementById('modalHardwareBrand').value = '';
+      document.getElementById('modalTechnician').value = '';
+      document.getElementById('modalNotes').value = '';
+      handleCategoryChange();
+      handleInstallTypeChange();
+      document.getElementById('addModal').style.display = 'flex';
+    }
+
+    window.editMarker = function(id) {
+      const item = savedStores.find(s => String(s.id) === String(id));
+      if (!item) return;
+
+      pendingCoords = { lat: parseCoord(item.lat), lng: parseCoord(item.lng) };
+      document.getElementById('editingId').value = item.id;
+      document.getElementById('modalTitle').textContent = '✏️ Redigera installation';
+
+      const stdCats = ["Jysk", "Normal", "Rusta", "Dollarstore", "Thansen", "Granngården", "Privatpersoner", "Övriga företag"];
+      if (stdCats.includes(item.brand)) {
+        document.getElementById('modalCategory').value = item.brand;
+        document.getElementById('modalCustomBrand').value = '';
+      } else {
+        document.getElementById('modalCategory').value = 'CUSTOM';
+        document.getElementById('modalCustomBrand').value = item.brand || '';
+      }
+
+      document.getElementById('modalName').value = item.customName || item.costumName || '';
+      document.getElementById('modalCity').value = item.city || '';
+
+      const stdTypes = ["Larm", "Kamera", "Passer", "Lås", "Larm & Kamera", "Larm & Passer", "Kamera & Passer", "Passer & Lås", "Komplett (Larm, Kamera, Passer & Lås)"];
+      if (stdTypes.includes(item.installType)) {
+        document.getElementById('modalInstallType').value = item.installType;
+        document.getElementById('modalCustomInstallType').value = '';
+      } else {
+        document.getElementById('modalInstallType').value = 'CUSTOM_TYPE';
+        document.getElementById('modalCustomInstallType').value = item.installType || '';
+      }
+
+      document.getElementById('modalHardwareBrand').value = item.hardwareBrand || '';
+      document.getElementById('modalTechnician').value = item.technician || '';
+      document.getElementById('modalNotes').value = item.notes || '';
+
+      handleCategoryChange();
+      handleInstallTypeChange();
+      document.getElementById('addModal').style.display = 'flex';
+    };
+
+    function closeAddModal() {
+      document.getElementById('addModal').style.display = 'none';
+      pendingCoords = null;
+    }
+
+    function handleCategoryChange() {
+      const catElem = document.getElementById('modalCategory');
+      const customGroup = document.getElementById('customBrandGroup');
+      if (catElem && customGroup) {
+        customGroup.style.display = (catElem.value === 'CUSTOM') ? 'block' : 'none';
       }
     }
 
-    if (action === 'delete') {
-      if (rowIndex !== -1) {
-        sheet.deleteRow(rowIndex);
+    function handleInstallTypeChange() {
+      const typeElem = document.getElementById('modalInstallType');
+      const customGroup = document.getElementById('customTypeGroup');
+      if (typeElem && customGroup) {
+        customGroup.style.display = (typeElem.value === 'CUSTOM_TYPE') ? 'block' : 'none';
       }
-      return ContentService.createTextOutput("Deleted").setMimeType(ContentService.MimeType.TEXT);
     }
 
-    // Tvinga punkt i koordinater
-    var cleanLat = String(contents.lat || "").replace(',', '.');
-    var cleanLng = String(contents.lng || "").replace(',', '.');
+    function saveNewInstallation() {
+      try {
+        if (!pendingCoords) {
+          alert("Ingen plats markerad på kartan.");
+          return;
+        }
 
-    // Genom att sätta ' framför tvingar vi Google Sheets att lagra det som ren text utan omvandling
-    var rowValues = [
-      "'" + String(contents.id || ""),
-      "'" + cleanLat,
-      "'" + cleanLng,
-      String(contents.brand || ""),
-      String(contents.customName || contents.costumName || ""),
-      String(contents.city || ""),
-      String(contents.installType || ""),
-      String(contents.hardwareBrand || ""),
-      String(contents.technician || ""),
-      String(contents.notes || "")
-    ];
+        const editId = document.getElementById('editingId').value;
+        const catSelect = document.getElementById('modalCategory').value;
+        let brand = catSelect;
+        if (catSelect === 'CUSTOM') {
+          const customBrandElem = document.getElementById('modalCustomBrand');
+          brand = (customBrandElem && customBrandElem.value.trim()) ? customBrandElem.value.trim() : 'Övriga företag';
+        }
 
-    if (rowIndex !== -1) {
-      sheet.getRange(rowIndex, 1, 1, rowValues.length).setValues([rowValues]);
-    } else {
-      sheet.appendRow(rowValues);
+        const customNameElem = document.getElementById('modalName');
+        const customName = customNameElem ? customNameElem.value.trim() : '';
+
+        const cityElem = document.getElementById('modalCity');
+        const city = cityElem ? cityElem.value.trim() : '';
+        
+        const typeSelect = document.getElementById('modalInstallType').value;
+        let installType = typeSelect;
+        if (typeSelect === 'CUSTOM_TYPE') {
+          const customTypeElem = document.getElementById('modalCustomInstallType');
+          installType = (customTypeElem && customTypeElem.value.trim()) ? customTypeElem.value.trim() : 'Ej angivet';
+        }
+
+        const hardwareElem = document.getElementById('modalHardwareBrand');
+        const hardwareBrand = hardwareElem ? hardwareElem.value.trim() : '';
+
+        const techElem = document.getElementById('modalTechnician');
+        const technician = techElem ? techElem.value.trim() : '';
+
+        const notesElem = document.getElementById('modalNotes');
+        const notes = notesElem ? notesElem.value.trim() : '';
+
+        let actionType = 'add';
+
+        if (editId) {
+          actionType = 'edit';
+          const index = savedStores.findIndex(s => String(s.id) === String(editId));
+          if (index !== -1) {
+            savedStores[index].brand = brand;
+            savedStores[index].customName = customName;
+            savedStores[index].city = city;
+            savedStores[index].installType = installType;
+            savedStores[index].hardwareBrand = hardwareBrand;
+            savedStores[index].technician = technician;
+            savedStores[index].notes = notes;
+          }
+        } else {
+          const newStore = {
+            id: Date.now().toString(),
+            lat: pendingCoords.lat,
+            lng: pendingCoords.lng,
+            brand: brand,
+            customName: customName,
+            city: city,
+            installType: installType,
+            hardwareBrand: hardwareBrand,
+            technician: technician,
+            notes: notes
+          };
+          savedStores.push(newStore);
+        }
+
+        localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
+        renderMarkers();
+
+        if (searchMarker) {
+          map.removeLayer(searchMarker);
+          searchMarker = null;
+        }
+
+        closeAddModal();
+
+        const storeToSave = savedStores.find(s => String(s.id) === String(editId || savedStores[savedStores.length - 1].id));
+        sendToGoogleSheets(actionType, storeToSave);
+
+      } catch (err) {
+        alert("Fel vid sparande: " + err.message);
+        console.error(err);
+      }
     }
-    
-    return ContentService.createTextOutput("Success").setMimeType(ContentService.MimeType.TEXT);
-  } catch (err) {
-    return ContentService.createTextOutput("Error: " + err.toString()).setMimeType(ContentService.MimeType.TEXT);
-  }
-}
+
+    function exportToCSV() {
+      if (savedStores.length === 0) {
+        alert("Det finns inga installationer att exportera ännu.");
+        return;
+      }
+
+      let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+      csvContent += "Kategori/Kedja,Namn,Stad,Installationstyp,Märke/Fabrikat,Tekniker,Anteckningar,Latitud,Longitud\n";
+
+      savedStores.forEach(s => {
+        const row = [
+          `"${s.brand || ''}"`,
+          `"${s.customName || s.costumName || ''}"`,
+          `"${s.city || ''}"`,
+          `"${s.installType || ''}"`,
+          `"${s.hardwareBrand || ''}"`,
+          `"${s.technician || ''}"`,
+          `"${(s.notes || '').replace(/"/g, '""')}"`,
+          `"${s.lat}"`,
+          `"${s.lng}"`
+        ];
+        csvContent += row.join(",") + "\n";
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Installationer_Seesafe_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    let searchTimeout = null;
+    function fetchSuggestions() {
+      const input = document.getElementById('searchInput').value;
+      const suggestionsList = document.getElementById('suggestions');
+      clearTimeout(searchTimeout);
+      if (input.length < 3) { suggestionsList.style.display = 'none'; return; }
+
+      searchTimeout = setTimeout(() => {
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(input)}&addressdetails=1&limit=5`)
+          .then(res => res.json())
+          .then(data => {
+            suggestionsList.innerHTML = '';
+            if (data.length === 0) { suggestionsList.style.display = 'none'; return; }
+            data.forEach(place => {
+              const city = (place.address && (place.address.city || place.address.town || place.address.village)) || "";
+              const li = document.createElement('li');
+              li.textContent = place.display_name;
+              li.onclick = () => showSearchPoint(parseFloat(place.lat), parseFloat(place.lon), place.display_name, city);
+              suggestionsList.appendChild(li);
+            });
+            suggestionsList.style.display = 'block';
+          });
+      }, 300);
+    }
+
+    function performSearch() {
+      const query = document.getElementById('searchInput').value;
+      if (!query) return;
+      document.getElementById('suggestions').style.display = 'none';
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.length > 0) {
+            const place = data[0];
+            const city = (place.address && (place.address.city || place.address.town || place.address.village)) || "";
+            showSearchPoint(parseFloat(place.lat), parseFloat(place.lon), place.display_name, city);
+          } else { alert("Hittade ingen plats."); }
+        });
+    }
+
+    function showSearchPoint(lat, lng, displayName, city) {
+      document.getElementById('suggestions').style.display = 'none';
+      document.getElementById('searchInput').value = displayName;
+      if (searchMarker) map.removeLayer(searchMarker);
+      map.setView([lat, lng], 16);
+      searchMarker = L.circleMarker([lat, lng], { radius: 10, fillColor: "#8a2be2", color: "#ffffff", weight: 3, opacity: 1, fillOpacity: 0.9 }).addTo(map);
+      searchMarker.bindPopup(`<div style="font-size: 13px;"><b>Sökt plats:</b><br>${displayName}<br><br><button onclick="openAddModal(${lat}, ${lng}, '${city.replace(/'/g, "\\'")}')" style="background:#28a745; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; width: 100%;">+ Spara installation här</button></div>`).openPopup();
+    }
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.search-container')) { document.getElementById('suggestions').style.display = 'none'; }
+    });
+
+    window.removeMarker = function(id) {
+      if (confirm("Vill du ta bort den här markeringen?")) {
+        savedStores = savedStores.filter(s => String(s.id) !== String(id));
+        localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
+        renderMarkers();
+
+        fetch(GOOGLE_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'delete', id: id })
+        });
+      }
+    };
+  </script>
+
+</body>
+</html>
