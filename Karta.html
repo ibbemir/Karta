@@ -247,7 +247,7 @@
   <script>
     // --- KONFIGURATION ---
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz8-AmljzLJ1k23vVAKuHarQQKX_5jmpNBh6jjOXsJKpSsi504PXjj8_z8Ni8QWsPEF/exec";
-    const APP_PASSWORD = "#SeeS@fe#"; // <-- Byt till önskat lösenord här!
+    const APP_PASSWORD = "Seesafe2026"; // Lösenord för att komma åt kartan
 
     let map = null;
     let savedStores = JSON.parse(localStorage.getItem('myInstalledStoresCache')) || [];
@@ -331,12 +331,15 @@
 
       marker.bindTooltip(labelText, { permanent: false, direction: 'top', offset: [0, -10], className: 'custom-tooltip' });
 
+      const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+
       const popupContent = `
         <div style="font-size: 13px; min-width: 160px;">
           <b style="font-size: 14px;">${displayName}</b> ${city ? '(' + city + ')' : ''}<br>
           <p style="margin: 4px 0; color: #444;"><b>Installation:</b> ${installType || 'Ej angivet'}</p>
           <p style="margin: 4px 0; color: #444;"><b>Tekniker:</b> ${technician || 'Ej angivet'}</p>
-          <button onclick="removeMarker('${id}')" style="background:#ff4d4d; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; margin-top:6px; width: 100%;">Ta bort</button>
+          <a href="${mapsUrl}" target="_blank" style="display: block; text-align: center; background: #28a745; color: white; text-decoration: none; padding: 6px; border-radius: 4px; font-weight: bold; margin-top: 8px; margin-bottom: 6px;">🚗 Hitta hit (Google Maps)</a>
+          <button onclick="removeMarker('${id}')" style="background:#ff4d4d; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; width: 100%;">Ta bort</button>
         </div>
       `;
 
