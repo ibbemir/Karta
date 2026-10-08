@@ -459,7 +459,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   
   <script>
-    // --- KONFIGURATION ---
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz8-AmljzLJ1k23vVAKuHarQQKX_5jmpNBh6jjOXsJKpSsi504PXjj8_z8Ni8QWsPEF/exec";
     const APP_PASSWORD = "Seesafe2026";
 
@@ -562,55 +561,47 @@
     }
 
     function createCustomMarker(store) {
-      const { id, lat, lng, brand, city, installType, technician, customName, notes, hardwareBrand } = store;
-      const icon = createMarkerIcon(brand, installType);
-      const marker = L.marker([lat, lng], { icon: icon }).addTo(map);
+      const icon = createMarkerIcon(store.brand, store.installType);
+      const marker = L.marker([store.lat, store.lng], { icon: icon }).addTo(map);
 
-      let displayName = customName || brand || "Installation";
-      if (customName && brand && brand !== customName && brand !== "Övriga företag") {
-        displayName = `${brand} – ${customName}`;
+      let displayName = store.customName || store.brand || "Installation";
+      if (store.customName && store.brand && store.brand !== store.customName && store.brand !== "Övriga företag") {
+        displayName = store.brand + " – " + store.customName;
       }
 
-      const labelText = city ? `${displayName} (${city})` : displayName;
+      const labelText = store.city ? displayName + ' (' + store.city + ')' : displayName;
       marker.bindTooltip(labelText, { permanent: false, direction: 'top', offset: [0, -10], className: 'custom-tooltip' });
 
-      const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+      const mapsUrl = "https://www.google.com/maps/dir/?api=1&destination=" + store.lat + "," + store.lng;
 
       let notesHtml = '';
-      if (notes && notes.trim() !== '') {
-        const formattedNotes = notes.trim().replace(/\n/g, '<br>');
-        notesHtml = `<div style="background: #fff8dc; border-left: 3px solid #f0ad4e; padding: 6px 8px; margin: 6px 0; font-size: 11px; border-radius: 4px; max-height: 120px; overflow-y: auto; color: #333;">
-          <b style="display:block; margin-bottom: 2px;">📋 Anteckningar & Logg:</b>
-          ${formattedNotes}
-        </div>`;
+      if (store.notes && String(store.notes).trim() !== '') {
+        const formattedNotes = String(store.notes).trim().replace(/\n/g, '<br>');
+        notesHtml = '<div style="background: #fff8dc; border-left: 3px solid #f0ad4e; padding: 6px 8px; margin: 6px 0; font-size: 11px; border-radius: 4px; max-height: 120px; overflow-y: auto; color: #333;">' +
+          '<b style="display:block; margin-bottom: 2px;">📋 Anteckningar & Logg:</b>' +
+          formattedNotes +
+        '</div>';
       }
 
-      const popupContent = `
-        <div style="font-size: 13px; min-width: 180px;">
-          <b style="font-size: 14px;">${displayName}</b> ${city ? '(' + city + ')' : ''}<br>
-          <p style="margin: 3px 0; color: #666; font-size: 11px;"><b>Kategori:</b> ${brand || 'Övriga företag'}</p>
-          <p style="margin: 3px 0; color: #444;"><b>Installation:</b> ${installType || 'Ej angivet'}</p>
-          ${hardwareBrand ? `<p style="margin: 3px 0; color: #444;"><b>Märke/Fabrikat:</b> ${hardwareBrand}</p>` : ''}
-          <p style="margin: 3px 0; color: #444;"><b>Tekniker:</b> ${technician || 'Ej angivet'}</p>
-          
-          ${notesHtml}
-
-          <button onclick="appendQuickNote('${id}')" style="width: 100%; background: #28a745; color: white; border: none; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 6px; margin-bottom: 6px;">➕ Lägg till anteckning</button>
-
-          <a href="${mapsUrl}" target="_blank" style="display: block; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 5px; border-radius: 4px; font-weight: bold; font-size: 12px; margin-bottom: 6px;">🚗 Hitta hit (Google Maps)</a>
-          
-          <div style="display: flex; gap: 4px;">
-            <button onclick="editMarker('${id}')" style="flex: 1; background:#6c757d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 11px;">✏️ Redigera</button>
-            <button onclick="removeMarker('${id}')" style="flex: 1; background:#ff4d4d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 11px;">Ta bort</button>
-          </div>
-        </div>
-      `;
+      const popupContent = '<div style="font-size: 13px; min-width: 180px;">' +
+        '<b style="font-size: 14px;">' + displayName + '</b> ' + (store.city ? '(' + store.city + ')' : '') + '<br>' +
+        '<p style="margin: 3px 0; color: #666; font-size: 11px;"><b>Kategori:</b> ' + (store.brand || 'Övriga företag') + '</p>' +
+        '<p style="margin: 3px 0; color: #444;"><b>Installation:</b> ' + (store.installType || 'Ej angivet') + '</p>' +
+        (store.hardwareBrand ? '<p style="margin: 3px 0; color: #444;"><b>Märke/Fabrikat:</b> ' + store.hardwareBrand + '</p>' : '') +
+        '<p style="margin: 3px 0; color: #444;"><b>Tekniker:</b> ' + (store.technician || 'Ej angivet') + '</p>' +
+        notesHtml +
+        '<button onclick="appendQuickNote(\'' + store.id + '\')" style="width: 100%; background: #28a745; color: white; border: none; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 6px; margin-bottom: 6px;">➕ Lägg till anteckning</button>' +
+        '<a href="' + mapsUrl + '" target="_blank" style="display: block; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 5px; border-radius: 4px; font-weight: bold; font-size: 12px; margin-bottom: 6px;">🚗 Hitta hit (Google Maps)</a>' +
+        '<div style="display: flex; gap: 4px;">' +
+          '<button onclick="editMarker(\'' + store.id + '\')" style="flex: 1; background:#6c757d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 11px;">✏️ Redigera</button>' +
+          '<button onclick="removeMarker(\'' + store.id + '\')" style="flex: 1; background:#ff4d4d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 11px;">Ta bort</button>' +
+        '</div>' +
+      '</div>';
 
       marker.bindPopup(popupContent);
       return marker;
     }
 
-    // Snabb-anteckning
     window.appendQuickNote = function(id) {
       const item = savedStores.find(s => String(s.id) === String(id));
       if (!item) return;
@@ -621,12 +612,12 @@
       if (!newNoteText || !newNoteText.trim()) return;
 
       const now = new Date();
-      const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      const timeStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
       
-      const entry = `• [${timeStr} - ${techName.trim()}]: ${newNoteText.trim()}`;
+      const entry = '• [' + timeStr + ' - ' + techName.trim() + ']: ' + newNoteText.trim();
 
-      if (item.notes && item.notes.trim()) {
-        item.notes = entry + "\n" + item.notes.trim();
+      if (item.notes && String(item.notes).trim()) {
+        item.notes = entry + "\n" + String(item.notes).trim();
       } else {
         item.notes = entry;
       }
@@ -676,7 +667,7 @@
       const statsList = document.getElementById('statsList');
       const totalBadge = document.getElementById('totalCountBadge');
       
-      totalBadge.textContent = `Totalt: ${savedStores.length}`;
+      totalBadge.textContent = 'Totalt: ' + savedStores.length;
 
       if (savedStores.length === 0) {
         statsList.innerHTML = '<div style="text-align: center; color: #999; padding: 4px;">Inga installationer ännu.</div>';
@@ -694,12 +685,7 @@
 
       let html = '';
       sortedBrands.forEach(([brand, count]) => {
-        html += `
-          <div class="stats-item">
-            <span>${brand}</span>
-            <b style="color: #333;">${count} st</b>
-          </div>
-        `;
+        html += '<div class="stats-item"><span>' + brand + '</span><b style="color: #333;">' + count + ' st</b></div>';
       });
 
       statsList.innerHTML = html;
@@ -739,7 +725,7 @@
       activeMarkers.forEach(item => {
         const matchesBrand = (selectedStore === 'ALL' || item.brand === selectedStore);
         const matchesType = (activeTypeFilter === 'ALL' || item.installType.toLowerCase().includes(activeTypeFilter));
-        const fullText = `${item.brand} ${item.customName} ${item.city} ${item.installType} ${item.hardwareBrand} ${item.technician} ${item.notes}`.toLowerCase();
+        const fullText = (item.brand + ' ' + item.customName + ' ' + item.city + ' ' + item.installType + ' ' + item.hardwareBrand + ' ' + item.technician + ' ' + item.notes).toLowerCase();
         const matchesSearch = (!searchVal || fullText.includes(searchVal));
 
         if (matchesBrand && matchesType && matchesSearch) {
