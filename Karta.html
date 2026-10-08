@@ -570,6 +570,8 @@
       }
 
       const labelText = store.city ? displayName + ' (' + store.city + ')' : displayName;
+      
+      // Sätt etikett som inte överlappar
       marker.bindTooltip(labelText, { permanent: false, direction: 'top', offset: [0, -10], className: 'custom-tooltip' });
 
       const mapsUrl = "https://www.google.com/maps/dir/?api=1&destination=" + store.lat + "," + store.lng;
@@ -583,7 +585,7 @@
         '</div>';
       }
 
-      const popupContent = '<div style="font-size: 13px; min-width: 180px;">' +
+      const popupContent = '<div style="font-size: 13px; min-width: 190px;">' +
         '<b style="font-size: 14px;">' + displayName + '</b> ' + (store.city ? '(' + store.city + ')' : '') + '<br>' +
         '<p style="margin: 3px 0; color: #666; font-size: 11px;"><b>Kategori:</b> ' + (store.brand || 'Övriga företag') + '</p>' +
         '<p style="margin: 3px 0; color: #444;"><b>Installation:</b> ' + (store.installType || 'Ej angivet') + '</p>' +
@@ -599,6 +601,12 @@
       '</div>';
 
       marker.bindPopup(popupContent);
+      
+      // Tvinga fram popupen direkt vid klick
+      marker.on('click', function() {
+        marker.openPopup();
+      });
+
       return marker;
     }
 
