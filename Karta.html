@@ -577,25 +577,30 @@
 
       let notesHtml = '';
       if (notes) {
-        notesHtml = `<div style="background: #fff8dc; border-left: 3px solid #f0ad4e; padding: 6px; margin: 6px 0; font-size: 11px; border-radius: 2px;">
-          <b>Anteckning:</b> ${notes}
-          ${noteLog ? `<br><i style="color: #777; font-size: 10px;">— ${noteLog}</i>` : ''}
+        const formattedNotes = notes.replace(/\n/g, '<br>');
+        notesHtml = `<div style="background: #fff8dc; border-left: 3px solid #f0ad4e; padding: 6px 8px; margin: 6px 0; font-size: 11px; border-radius: 4px; max-height: 120px; overflow-y: auto; color: #333;">
+          <b style="display:block; margin-bottom: 2px;">📋 Anteckningar & Logg:</b>
+          ${formattedNotes}
         </div>`;
       }
 
       const popupContent = `
-        <div style="font-size: 13px; min-width: 175px;">
+        <div style="font-size: 13px; min-width: 180px;">
           <b style="font-size: 14px;">${displayName}</b> ${city ? '(' + city + ')' : ''}<br>
           <p style="margin: 3px 0; color: #666; font-size: 11px;"><b>Kategori:</b> ${brand || 'Övriga företag'}</p>
           <p style="margin: 3px 0; color: #444;"><b>Installation:</b> ${installType || 'Ej angivet'}</p>
           ${hardwareBrand ? `<p style="margin: 3px 0; color: #444;"><b>Märke/Fabrikat:</b> ${hardwareBrand}</p>` : ''}
           <p style="margin: 3px 0; color: #444;"><b>Tekniker:</b> ${technician || 'Ej angivet'}</p>
+          
           ${notesHtml}
-          <a href="${mapsUrl}" target="_blank" style="display: block; text-align: center; background: #28a745; color: white; text-decoration: none; padding: 5px; border-radius: 4px; font-weight: bold; margin-top: 6px; margin-bottom: 6px;">🚗 Hitta hit (Google Maps)</a>
+
+          <button onclick="appendQuickNote('${id}')" style="width: 100%; background: #28a745; color: white; border: none; padding: 5px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 4px; margin-bottom: 6px;">➕ Lägg till anteckning</button>
+
+          <a href="${mapsUrl}" target="_blank" style="display: block; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 5px; border-radius: 4px; font-weight: bold; font-size: 12px; margin-bottom: 6px;">🚗 Hitta hit (Google Maps)</a>
           
           <div style="display: flex; gap: 4px;">
-            <button onclick="editMarker('${id}')" style="flex: 1; background:#007bff; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold;">✏️ Redigera</button>
-            <button onclick="removeMarker('${id}')" style="flex: 1; background:#ff4d4d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold;">Ta bort</button>
+            <button onclick="editMarker('${id}')" style="flex: 1; background:#6c757d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 11px;">✏️ Redigera</button>
+            <button onclick="removeMarker('${id}')" style="flex: 1; background:#ff4d4d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 11px;">Ta bort</button>
           </div>
         </div>
       `;
@@ -603,6 +608,42 @@
       marker.bindPopup(popupContent);
       return marker;
     }
+
+    // Funktion för att snabbt lägga till en extra anteckning med tidsstämpel utan att öppna redigera-modalen
+    window.appendQuickNote = function(id) {
+      const item = savedStores.find(s => s.id === id);
+      if (!item) return;
+
+      const techName = prompt("Ditt namn/tekniker (t.ex. Ibbe):", item.technician || "") || "Okänd tekniker";
+      const newNoteText = prompt("Skriv din nya anteckning här:");
+
+      if (!newNoteText || !newNoteText.trim()) return;
+
+      const now = new Date();
+      const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      
+      const entry = `• [${timeStr} - ${techName.trim()}]: ${newNoteText.trim()}`;
+
+      // Lägg till den nya anteckningen överst i listan
+      if (item.notes && item.notes.trim()) {
+        item.notes = entry + "\n" + item.notes;
+      } else {
+        item.notes = entry;
+      }
+
+      localStorage.setItem('myInstalledStoresCache', JSON.stringify(savedStores));
+      renderMarkers();
+
+      // Synka uppdateringen till Google Sheets
+      fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'add', ...item })
+      }).then(() => {
+        setTimeout(loadSavedStores, 1500);
+      });
+    };
 
     function renderMarkers() {
       if (!map) return;
@@ -834,11 +875,6 @@
       const technician = document.getElementById('modalTechnician').value.trim();
       const notes = document.getElementById('modalNotes').value.trim();
 
-      const now = new Date();
-      const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-      const noteAuthor = technician || "Okänd tekniker";
-      const noteLog = notes ? `Sparad av ${noteAuthor} (${timeStr})` : '';
-
       if (editId) {
         const index = savedStores.findIndex(s => s.id === editId);
         if (index !== -1) {
@@ -849,7 +885,6 @@
           savedStores[index].hardwareBrand = hardwareBrand;
           savedStores[index].technician = technician;
           savedStores[index].notes = notes;
-          savedStores[index].noteLog = noteLog;
         }
       } else {
         const newStore = {
@@ -863,8 +898,7 @@
           installType: installType,
           hardwareBrand: hardwareBrand,
           technician: technician,
-          notes: notes,
-          noteLog: noteLog
+          notes: notes
         };
         savedStores.push(newStore);
       }
@@ -897,7 +931,7 @@
       }
 
       let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
-      csvContent += "Kategori/Kedja,Namn,Stad,Installationstyp,Märke/Fabrikat,Tekniker,Anteckningar,Anteckningslogg,Latitud,Longitud\n";
+      csvContent += "Kategori/Kedja,Namn,Stad,Installationstyp,Märke/Fabrikat,Tekniker,Anteckningar,Latitud,Longitud\n";
 
       savedStores.forEach(s => {
         const row = [
@@ -908,7 +942,6 @@
           `"${s.hardwareBrand || ''}"`,
           `"${s.technician || ''}"`,
           `"${(s.notes || '').replace(/"/g, '""')}"`,
-          `"${s.noteLog || ''}"`,
           `"${s.lat}"`,
           `"${s.lng}"`
         ];
