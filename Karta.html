@@ -54,7 +54,7 @@
     }
     .login-error { color: #d9534f; font-size: 13px; margin-top: 8px; display: none; }
 
-    /* Modal för ny installation */
+    /* Modal för ny / redigera installation */
     #addModal {
       position: fixed;
       top: 0; left: 0; width: 100vw; height: 100vh;
@@ -69,18 +69,21 @@
       padding: 20px;
       border-radius: 12px;
       width: 90%;
-      max-width: 360px;
+      max-width: 380px;
+      max-height: 90vh;
+      overflow-y: auto;
       box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
     .modal-box h3 { margin-top: 0; margin-bottom: 14px; font-size: 16px; text-align: center; color: #333; }
     .modal-field { margin-bottom: 12px; }
     .modal-field label { display: block; font-size: 12px; font-weight: bold; color: #555; margin-bottom: 4px; }
-    .modal-field select, .modal-field input {
+    .modal-field select, .modal-field input, .modal-field textarea {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid #ccc;
       border-radius: 6px;
       font-size: 14px;
+      font-family: inherit;
     }
     .modal-buttons { display: flex; gap: 8px; margin-top: 16px; }
     .modal-buttons button {
@@ -200,6 +203,19 @@
       font-weight: bold;
     }
 
+    .btn-export {
+      width: 100%;
+      background: #17a2b8;
+      color: white;
+      border: none;
+      padding: 8px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 12px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
     .legend-grid { display: grid; grid-template-columns: 1fr; gap: 4px; }
     .legend-item { display: flex; align-items: center; font-size: 12px; }
     .color-dot { 
@@ -304,10 +320,12 @@
     </div>
   </div>
 
-  <!-- Modal för att lägga till ny installation -->
+  <!-- Modal för att lägga till/redigera installation -->
   <div id="addModal">
     <div class="modal-box">
-      <h3>➕ Ny installation</h3>
+      <h3 id="modalTitle">➕ Ny installation</h3>
+      <input type="hidden" id="editingId" value="">
+
       <div class="modal-field">
         <label for="modalCategory">1. Välj typ / kedja:</label>
         <select id="modalCategory" onchange="handleCategoryChange()">
@@ -346,6 +364,11 @@
       <div class="modal-field">
         <label for="modalTechnician">Tekniker:</label>
         <input type="text" id="modalTechnician" placeholder="t.ex. Ibbe">
+      </div>
+
+      <div class="modal-field">
+        <label for="modalNotes">Anteckningar / LC-ID / Koder:</label>
+        <textarea id="modalNotes" rows="3" placeholder="Särskilda instruktioner, abonnemangsnummer etc..."></textarea>
       </div>
 
       <div class="modal-buttons">
@@ -393,6 +416,8 @@
           <button class="quick-filter-btn" onclick="setQuickFilter('passer', this)">Passer</button>
           <button class="quick-filter-btn" onclick="setQuickFilter('kamera', this)">Kamera</button>
         </div>
+
+        <button class="btn-export" onclick="exportToCSV()">📥 Exportera till CSV (Excel)</button>
       </div>
       <hr>
       <h3>Färgkodning</h3>
@@ -478,19 +503,43 @@
       return { type: 'solid', color: '#888888' };
     }
 
-    function createMarkerIcon(brandName) {
-      const style = getStoreColor(brandName);
-      let svgHtml = '';
-      if (style.type === 'split') {
-        svgHtml = `<svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="9" fill="#ffffff" stroke="#ffffff" stroke-width="2"/><path d="M 11,2 A 9,9 0 0,0 11,20 Z" fill="${style.color1}" /><path d="M 11,2 A 9,9 0 0,1 11,20 Z" fill="${style.color2}" /><circle cx="11" cy="11" r="9" fill="none" stroke="#ffffff" stroke-width="2"/></svg>`;
-      } else {
-        svgHtml = `<svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="9" fill="${style.color}" stroke="#ffffff" stroke-width="2"/></svg>`;
-      }
-      return L.divIcon({ html: svgHtml, className: 'custom-svg-icon', iconSize: [22, 22], iconAnchor: [11, 11] });
+    // Funktion 3: Välj Ikon baserat på installationstyp (Larm, Kamera, Passer)
+    function getTypeSymbol(installType) {
+      const type = (installType || "").toLowerCase();
+      if (type.includes("kamera") || type.includes("cctv")) return "📷";
+      if (type.includes("passer") || type.includes("lås") || type.includes("passagesystem")) return "🔑";
+      if (type.includes("larm") || type.includes("inbrott")) return "🛡️";
+      return ""; // Standard prick om ingen matchar
     }
 
-    function createCustomMarker(id, lat, lng, brand, city, installType, technician, customName) {
-      const icon = createMarkerIcon(brand);
+    function createMarkerIcon(brandName, installType) {
+      const style = getStoreColor(brandName);
+      const symbol = getTypeSymbol(installType);
+
+      let innerContent = symbol 
+        ? `<text x="11" y="15" font-size="11" text-anchor="middle">${symbol}</text>` 
+        : ``;
+
+      let svgHtml = '';
+      if (style.type === 'split') {
+        svgHtml = `<svg width="24" height="24" viewBox="0 0 22 22">
+          <circle cx="11" cy="11" r="9" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+          <path d="M 11,2 A 9,9 0 0,0 11,20 Z" fill="${style.color1}" />
+          <path d="M 11,2 A 9,9 0 0,1 11,20 Z" fill="${style.color2}" />
+          <circle cx="11" cy="11" r="9" fill="none" stroke="#ffffff" stroke-width="2"/>
+          ${innerContent}
+        </svg>`;
+      } else {
+        svgHtml = `<svg width="24" height="24" viewBox="0 0 22 22">
+          <circle cx="11" cy="11" r="9" fill="${style.color}" stroke="#ffffff" stroke-width="2"/>
+          ${innerContent}
+        </svg>`;
+      }
+      return L.divIcon({ html: svgHtml, className: 'custom-svg-icon', iconSize: [24, 24], iconAnchor: [12, 12] });
+    }
+
+    function createCustomMarker(id, lat, lng, brand, city, installType, technician, customName, notes, noteLog) {
+      const icon = createMarkerIcon(brand, installType);
       const marker = L.marker([lat, lng], { icon: icon }).addTo(map);
 
       let displayName = customName || brand || "Installation";
@@ -499,19 +548,31 @@
       }
 
       const labelText = city ? `${displayName} (${city})` : displayName;
-
       marker.bindTooltip(labelText, { permanent: false, direction: 'top', offset: [0, -10], className: 'custom-tooltip' });
 
       const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 
+      let notesHtml = '';
+      if (notes) {
+        notesHtml = `<div style="background: #fff8dc; border-left: 3px solid #f0ad4e; padding: 6px; margin: 6px 0; font-size: 11px; border-radius: 2px;">
+          <b>Anteckning:</b> ${notes}
+          ${noteLog ? `<br><i style="color: #777; font-size: 10px;">— ${noteLog}</i>` : ''}
+        </div>`;
+      }
+
       const popupContent = `
-        <div style="font-size: 13px; min-width: 160px;">
+        <div style="font-size: 13px; min-width: 170px;">
           <b style="font-size: 14px;">${displayName}</b> ${city ? '(' + city + ')' : ''}<br>
-          <p style="margin: 4px 0; color: #666; font-size: 11px;"><b>Kategori:</b> ${brand || 'Övriga företag'}</p>
-          <p style="margin: 4px 0; color: #444;"><b>Installation:</b> ${installType || 'Ej angivet'}</p>
-          <p style="margin: 4px 0; color: #444;"><b>Tekniker:</b> ${technician || 'Ej angivet'}</p>
-          <a href="${mapsUrl}" target="_blank" style="display: block; text-align: center; background: #28a745; color: white; text-decoration: none; padding: 6px; border-radius: 4px; font-weight: bold; margin-top: 8px; margin-bottom: 6px;">🚗 Hitta hit (Google Maps)</a>
-          <button onclick="removeMarker('${id}')" style="background:#ff4d4d; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; width: 100%;">Ta bort</button>
+          <p style="margin: 3px 0; color: #666; font-size: 11px;"><b>Kategori:</b> ${brand || 'Övriga företag'}</p>
+          <p style="margin: 3px 0; color: #444;"><b>Installation:</b> ${installType || 'Ej angivet'}</p>
+          <p style="margin: 3px 0; color: #444;"><b>Tekniker:</b> ${technician || 'Ej angivet'}</p>
+          ${notesHtml}
+          <a href="${mapsUrl}" target="_blank" style="display: block; text-align: center; background: #28a745; color: white; text-decoration: none; padding: 5px; border-radius: 4px; font-weight: bold; margin-top: 6px; margin-bottom: 6px;">🚗 Hitta hit (Google Maps)</a>
+          
+          <div style="display: flex; gap: 4px;">
+            <button onclick="editMarker('${id}')" style="flex: 1; background:#007bff; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold;">✏️ Redigera</button>
+            <button onclick="removeMarker('${id}')" style="flex: 1; background:#ff4d4d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold;">Ta bort</button>
+          </div>
         </div>
       `;
 
@@ -528,7 +589,7 @@
         let displayBrand = store.brand;
         if (displayBrand === "T.Hansen") displayBrand = "Thansen";
 
-        const m = createCustomMarker(store.id, store.lat, store.lng, displayBrand, store.city, store.installType, store.technician, store.customName);
+        const m = createCustomMarker(store.id, store.lat, store.lng, displayBrand, store.city, store.installType, store.technician, store.customName, store.notes, store.noteLog);
         activeMarkers.push({ 
           id: store.id, 
           brand: displayBrand, 
@@ -536,6 +597,7 @@
           city: store.city || '',
           installType: store.installType || '',
           technician: store.technician || '',
+          notes: store.notes || '',
           layer: m 
         });
       });
@@ -610,14 +672,9 @@
       const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
 
       activeMarkers.forEach(item => {
-        // 1. Filter per Kedja
         const matchesBrand = (selectedStore === 'ALL' || item.brand === selectedStore);
-
-        // 2. Filter per Typ (Snabbfilter)
         const matchesType = (activeTypeFilter === 'ALL' || item.installType.toLowerCase().includes(activeTypeFilter));
-
-        // 3. Filter per Fritextsökning (Sökfältsdata: Namn, Tekniker, Stad, Typ, Kedja)
-        const fullText = `${item.brand} ${item.customName} ${item.city} ${item.installType} ${item.technician}`.toLowerCase();
+        const fullText = `${item.brand} ${item.customName} ${item.city} ${item.installType} ${item.technician} ${item.notes}`.toLowerCase();
         const matchesSearch = (!searchVal || fullText.includes(searchVal));
 
         if (matchesBrand && matchesType && matchesSearch) {
@@ -648,17 +705,49 @@
         .catch(err => console.error("Kunde inte synka med Google Sheets:", err));
     }
 
+    // Modal-hantering för Ny / Redigera
     function openAddModal(lat, lng, defaultCity = "") {
       pendingCoords = { lat, lng };
+      document.getElementById('editingId').value = '';
+      document.getElementById('modalTitle').textContent = '➕ Ny installation';
       document.getElementById('modalCategory').value = 'Jysk';
       document.getElementById('modalCustomBrand').value = '';
       document.getElementById('modalName').value = '';
       document.getElementById('modalCity').value = defaultCity;
       document.getElementById('modalInstallType').value = '';
       document.getElementById('modalTechnician').value = '';
+      document.getElementById('modalNotes').value = '';
       handleCategoryChange();
       document.getElementById('addModal').style.display = 'flex';
     }
+
+    // Funktion 5: Redigera befintlig markering
+    window.editMarker = function(id) {
+      const item = savedStores.find(s => s.id === id);
+      if (!item) return;
+
+      pendingCoords = { lat: item.lat, lng: item.lng };
+      document.getElementById('editingId').value = item.id;
+      document.getElementById('modalTitle').textContent = '✏️ Redigera installation';
+
+      const stdCats = ["Jysk", "Normal", "Rusta", "Dollarstore", "Thansen", "Granngården", "Privatpersoner", "Övriga företag"];
+      if (stdCats.includes(item.brand)) {
+        document.getElementById('modalCategory').value = item.brand;
+        document.getElementById('modalCustomBrand').value = '';
+      } else {
+        document.getElementById('modalCategory').value = 'CUSTOM';
+        document.getElementById('modalCustomBrand').value = item.brand || '';
+      }
+
+      document.getElementById('modalName').value = item.customName || '';
+      document.getElementById('modalCity').value = item.city || '';
+      document.getElementById('modalInstallType').value = item.installType || '';
+      document.getElementById('modalTechnician').value = item.technician || '';
+      document.getElementById('modalNotes').value = item.notes || '';
+
+      handleCategoryChange();
+      document.getElementById('addModal').style.display = 'flex';
+    };
 
     function closeAddModal() {
       document.getElementById('addModal').style.display = 'none';
@@ -675,9 +764,11 @@
       }
     }
 
+    // Funktion 2 & 5: Spara ny eller redigerad installation med automatisk tidsstämpel och användare
     function saveNewInstallation() {
       if (!pendingCoords) return;
 
+      const editId = document.getElementById('editingId').value;
       const catSelect = document.getElementById('modalCategory').value;
       let brand = catSelect;
       if (catSelect === 'CUSTOM') {
@@ -688,20 +779,44 @@
       const city = document.getElementById('modalCity').value.trim();
       const installType = document.getElementById('modalInstallType').value.trim();
       const technician = document.getElementById('modalTechnician').value.trim();
+      const notes = document.getElementById('modalNotes').value.trim();
 
-      const newStore = {
-        action: 'add',
-        id: Date.now().toString(),
-        lat: pendingCoords.lat,
-        lng: pendingCoords.lng,
-        brand: brand,
-        customName: customName,
-        city: city,
-        installType: installType,
-        technician: technician
-      };
+      // Skapa tidsstämpel för antecknings-logg
+      const now = new Date();
+      const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      const noteAuthor = technician || "Okänd tekniker";
+      const noteLog = notes ? `Sparad av ${noteAuthor} (${timeStr})` : '';
 
-      savedStores.push(newStore);
+      if (editId) {
+        // Redigera befintlig
+        const index = savedStores.findIndex(s => s.id === editId);
+        if (index !== -1) {
+          savedStores[index].brand = brand;
+          savedStores[index].customName = customName;
+          savedStores[index].city = city;
+          savedStores[index].installType = installType;
+          savedStores[index].technician = technician;
+          savedStores[index].notes = notes;
+          savedStores[index].noteLog = noteLog;
+        }
+      } else {
+        // Skapa ny
+        const newStore = {
+          action: 'add',
+          id: Date.now().toString(),
+          lat: pendingCoords.lat,
+          lng: pendingCoords.lng,
+          brand: brand,
+          customName: customName,
+          city: city,
+          installType: installType,
+          technician: technician,
+          notes: notes,
+          noteLog: noteLog
+        };
+        savedStores.push(newStore);
+      }
+
       localStorage.setItem('myInstalledStoresCache', JSON.stringify(savedStores));
       renderMarkers();
 
@@ -712,14 +827,50 @@
 
       closeAddModal();
 
+      // Synka till Google Sheets
+      const storeToSave = savedStores.find(s => s.id === (editId || savedStores[savedStores.length - 1].id));
       fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(newStore)
+        body: JSON.stringify({ action: 'add', ...storeToSave })
       }).then(() => {
         setTimeout(loadSavedStores, 1500);
       });
+    }
+
+    // Funktion 4: Exportera alla installationer till CSV (Excel)
+    function exportToCSV() {
+      if (savedStores.length === 0) {
+        alert("Det finns inga installationer att exportera ännu.");
+        return;
+      }
+
+      let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // UTF-8 BOM för svenska tecken i Excel
+      csvContent += "Kategori/Kedja,Namn,Stad,Installationstyp,Tekniker,Anteckningar,Anteckningslogg,Latitud,Longitud\n";
+
+      savedStores.forEach(s => {
+        const row = [
+          `"${s.brand || ''}"`,
+          `"${s.customName || ''}"`,
+          `"${s.city || ''}"`,
+          `"${s.installType || ''}"`,
+          `"${s.technician || ''}"`,
+          `"${(s.notes || '').replace(/"/g, '""')}"`,
+          `"${s.noteLog || ''}"`,
+          `"${s.lat}"`,
+          `"${s.lng}"`
+        ];
+        csvContent += row.join(",") + "\n";
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Installationer_Seesafe_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
 
     let searchTimeout = null;
