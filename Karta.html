@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mina Larm- & Butiksinstallationer</title>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f0f2f5; }
+    #map { height: 100vh; width: 100vw; display: none; }
+
+    /* Lösenordsskärm */
+    #loginOverlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    }
+    .login-box {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      text-align: center;
+      max-width: 320px;
+      width: 90%;
+    }
+    .login-box h2 { margin-top: 0; font-size: 18px; color: #333; }
+    .login-box input {
+      width: 100%;
+      padding: 10px;
+      margin: 12px 0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 16px;
+      text-align: center;
+    }
+    .login-box button {
+      width: 100%;
+      padding: 10px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .login-error { color: #d9534f; font-size: 13px; margin-top: 8px; display: none; }
+
+    /* Kartsök och menyer */
+    .search-container { 
+      position: absolute; 
+      top: 10px; 
+      left: 10px; 
+      right: 10px;
+      z-index: 1000; 
+      max-width: 400px;
+    }
+    .search-box { 
+      display: flex; 
+      background: white; 
+      padding: 6px; 
+      border-radius: 8px; 
+      box-shadow: 0 2px 10px rgba(0,0,0,0.25); 
+      gap: 6px; 
+    }
+    .search-box input { 
+      flex: 1; 
+      padding: 8px; 
+      border: 1px solid #ccc; 
+      border-radius: 6px; 
+      font-size: 14px; 
+      outline: none; 
+    }
+    .search-box button { 
+      padding: 8px 14px; 
+      background: #007bff; 
+      color: white; 
+      border: none; 
+      border-radius: 6px; 
+      cursor: pointer; 
+      font-weight: bold; 
+      font-size: 14px;
+    }
+    .suggestions-list { 
+      background: white; 
+      border-radius: 8px; 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
+      margin-top: 4px; 
+      max-height: 200px; 
+      overflow-y: auto; 
+      display: none; 
+      padding: 0; 
+      list-style: none; 
+    }
+    .suggestions-list li { 
+      padding: 10px 12px; 
+      border-bottom: 1px solid #eee; 
+      cursor: pointer; 
+      font-size: 13px; 
+      color: #333; 
+    }
+
+    .info-box { 
+      position: absolute; 
+      top: 10px; 
+      right: 10px; 
+      z-index: 1000; 
+      background: white; 
+      padding: 12px 14px; 
+      border-radius: 10px; 
+      box-shadow: 0 2px 12px rgba(0,0,0,0.25); 
+      width: 260px;
+      max-height: 85vh;
+      overflow-y: auto;
+      transition: all 0.3s ease;
+    }
+    .info-box h3 { margin-top: 0; margin-bottom: 6px; font-size: 14px; }
+    .filter-section { margin-bottom: 8px; }
+    .filter-section select { 
+      width: 100%; 
+      padding: 8px; 
+      border-radius: 6px; 
+      border: 1px solid #ccc; 
+      font-size: 13px; 
+      background: #fff;
+    }
+    .legend-grid { display: grid; grid-template-columns: 1fr; gap: 4px; }
+    .legend-item { display: flex; align-items: center; font-size: 12px; }
+    .color-dot { 
+      width: 14px; 
+      height: 14px; 
+      border-radius: 50%; 
+      margin-right: 8px; 
+      display: inline-block; 
+      border: 1px solid #ccc; 
+      box-sizing: border-box; 
+      flex-shrink: 0; 
+    }
+    .color-dot.dollarstore { background: linear-gradient(90deg, #ffd700 50%, #ff4d4d 50%); }
+
+    .toggle-panel-btn {
+      display: none;
+      width: 100%;
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      padding: 6px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    @media (max-width: 600px) {
+      .search-container { top: 10px; left: 10px; right: 10px; max-width: none; }
+      .info-box {
+        top: auto;
+        bottom: 15px;
+        left: 10px;
+        right: 10px;
+        width: auto;
+        max-height: 40vh;
+        padding: 10px;
+        border-radius: 12px;
+      }
+      .toggle-panel-btn { display: block; }
+      .panel-content.collapsed { display: none; }
+      .legend-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+      hr { margin: 6px 0; }
+    }
+
+    .leaflet-tooltip.custom-tooltip { 
+      background-color: #333333; 
+      color: #ffffff; 
+      border: none; 
+      border-radius: 6px; 
+      padding: 5px 8px; 
+      font-size: 12px; 
+      font-weight: bold; 
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3); 
+    }
+    .leaflet-tooltip-top.custom-tooltip::before { border-top-color: #333333; }
+    .custom-svg-icon { background: none; border: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Lösenordsvy -->
+  <div id="loginOverlay">
+    <div class="login-box">
+      <h2>🔒 Behörighet krävs</h2>
+      <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Ange lösenord för att visa installationskartan</p>
+      <input type="password" id="passwordInput" placeholder="Lösenord..." onkeypress="if(event.key==='Enter') checkPassword()">
+      <button onclick="checkPassword()">Lås upp kartan</button>
+      <div id="loginError" class="login-error">Fel lösenord, försök igen!</div>
+    </div>
+  </div>
+
+  <datalist id="existingStoresList"></datalist>
+
+  <div class="search-container">
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="Sök adress/stad..." oninput="fetchSuggestions()" onkeypress="if(event.key === 'Enter') performSearch()">
+      <button onclick="performSearch()">Sök</button>
+    </div>
+    <ul id="suggestions" class="suggestions-list"></ul>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="info-box">
+    <button class="toggle-panel-btn" onclick="togglePanel()">📋 Visa/Dölj Filter & Meny</button>
+    
+    <div id="panelContent" class="panel-content">
+      <div class="filter-section">
+        <label for="storeFilter" style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 4px;">Visa kedja/butik:</label>
+        <select id="storeFilter" onchange="filterStores()">
+          <option value="ALL">-- Visa alla installationer --</option>
+        </select>
+      </div>
+      <hr>
+      <h3>Färgkodning</h3>
+      <div class="legend-grid">
+        <div class="legend-item"><span class="color-dot" style="background: #1e90ff;"></span> Jysk</div>
+        <div class="legend-item"><span class="color-dot" style="background: #40e0d0;"></span> Normal</div>
+        <div class="legend-item"><span class="color-dot" style="background: #ffd700;"></span> Rusta</div>
+        <div class="legend-item"><span class="color-dot dollarstore"></span> Dollarstore</div>
+        <div class="legend-item"><span class="color-dot" style="background: #00008b;"></span> T.Hansen</div>
+        <div class="legend-item"><span class="color-dot" style="background: #8b4513;"></span> Granngården</div>
+        <div class="legend-item"><span class="color-dot" style="background: #ffffff; border-color: #999;"></span> Privatpersoner</div>
+        <div class="legend-item"><span class="color-dot" style="background: #888888;"></span> Övriga företag</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <script>
+    // --- KONFIGURATION ---
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz8-AmljzLJ1k23vVAKuHarQQKX_5jmpNBh6jjOXsJKpSsi504PXjj8_z8Ni8QWsPEF/exec";
+    const APP_PASSWORD = "#SeeS@fe#"; // <-- Byt till önskat lösenord här!
+
+    let map = null;
+    let savedStores = JSON.parse(localStorage.getItem('myInstalledStoresCache')) || [];
+    let searchMarker = null;
+    let activeMarkers = [];
+
+    // Lösenordshantering
+    function checkPassword() {
+      const input = document.getElementById('passwordInput').value;
+      if (input === APP_PASSWORD) {
+        localStorage.setItem('map_auth_token', APP_PASSWORD);
+        unlockMap();
+      } else {
+        document.getElementById('loginError').style.display = 'block';
+      }
+    }
+
+    function unlockMap() {
+      document.getElementById('loginOverlay').style.display = 'none';
+      document.getElementById('map').style.display = 'block';
+      initMap();
+    }
+
+    // Auto-inloggning om lösenord sparats på enheten
+    window.addEventListener('DOMContentLoaded', () => {
+      if (localStorage.getItem('map_auth_token') === APP_PASSWORD) {
+        unlockMap();
+      }
+    });
+
+    function initMap() {
+      if (map) return;
+
+      map = L.map('map', { zoomControl: false }).setView([56.0, 13.5], 6);
+
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+        attribution: 'Tiles &copy; Esri'
+      }).addTo(map);
+
+      map.on('click', function(e) { addStoreAt(e.latlng.lat, e.latlng.lng); });
+
+      loadSavedStores();
+    }
+
+    function togglePanel() {
+      document.getElementById('panelContent').classList.toggle('collapsed');
+    }
+
+    function getStoreColor(brandName) {
+      const name = (brandName || "").toLowerCase().trim();
+      if (name.includes("jysk")) return { type: 'solid', color: '#1e90ff' };
+      if (name.includes("normal")) return { type: 'solid', color: '#40e0d0' };
+      if (name.includes("rusta")) return { type: 'solid', color: '#ffd700' };
+      if (name.includes("dollarstore") || name.includes("dollar store")) return { type: 'split', color1: '#ffd700', color2: '#ff4d4d' };
+      if (name.includes("thansen") || name.includes("t.hansen") || name.includes("t hansen")) return { type: 'solid', color: '#00008b' };
+      if (name.includes("granngården") || name.includes("granngarden")) return { type: 'solid', color: '#8b4513' };
+      if (name.includes("privat") || name.includes("privatperson")) return { type: 'solid', color: '#ffffff' };
+      return { type: 'solid', color: '#888888' };
+    }
+
+    function createMarkerIcon(brandName) {
+      const style = getStoreColor(brandName);
+      let svgHtml = '';
+      if (style.type === 'split') {
+        svgHtml = `<svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="9" fill="#ffffff" stroke="#ffffff" stroke-width="2"/><path d="M 11,2 A 9,9 0 0,0 11,20 Z" fill="${style.color1}" /><path d="M 11,2 A 9,9 0 0,1 11,20 Z" fill="${style.color2}" /><circle cx="11" cy="11" r="9" fill="none" stroke="#ffffff" stroke-width="2"/></svg>`;
+      } else {
+        svgHtml = `<svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="9" fill="${style.color}" stroke="#ffffff" stroke-width="2"/></svg>`;
+      }
+      return L.divIcon({ html: svgHtml, className: 'custom-svg-icon', iconSize: [22, 22], iconAnchor: [11, 11] });
+    }
+
+    function createCustomMarker(id, lat, lng, brand, city, installType, technician) {
+      const icon = createMarkerIcon(brand);
+      const marker = L.marker([lat, lng], { icon: icon }).addTo(map);
+
+      const displayName = brand || "Installation";
+      const labelText = city ? `${displayName} – ${city}` : displayName;
+
+      marker.bindTooltip(labelText, { permanent: false, direction: 'top', offset: [0, -10], className: 'custom-tooltip' });
+
+      const popupContent = `
+        <div style="font-size: 13px; min-width: 160px;">
+          <b style="font-size: 14px;">${displayName}</b> ${city ? '(' + city + ')' : ''}<br>
+          <p style="margin: 4px 0; color: #444;"><b>Installation:</b> ${installType || 'Ej angivet'}</p>
+          <p style="margin: 4px 0; color: #444;"><b>Tekniker:</b> ${technician || 'Ej angivet'}</p>
+          <button onclick="removeMarker('${id}')" style="background:#ff4d4d; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; margin-top:6px; width: 100%;">Ta bort</button>
+        </div>
+      `;
+
+      marker.bindPopup(popupContent);
+      return marker;
+    }
+
+    function renderMarkers() {
+      if (!map) return;
+      activeMarkers.forEach(m => map.removeLayer(m.layer));
+      activeMarkers = [];
+
+      savedStores.forEach(store => {
+        const m = createCustomMarker(store.id, store.lat, store.lng, store.brand, store.city, store.installType, store.technician);
+        activeMarkers.push({ id: store.id, brand: store.brand, layer: m });
+      });
+
+      updateStoreLists();
+      filterStores();
+    }
+
+    function updateStoreLists() {
+      const select = document.getElementById('storeFilter');
+      const dataList = document.getElementById('existingStoresList');
+      const currentValue = select.value;
+      
+      select.innerHTML = '<option value="ALL">-- Visa alla installationer --</option>';
+      dataList.innerHTML = '';
+
+      const uniqueBrands = [...new Set(savedStores.map(s => s.brand))].filter(Boolean).sort();
+
+      uniqueBrands.forEach(brandName => {
+        const option = document.createElement('option');
+        option.value = brandName;
+        option.textContent = brandName;
+        select.appendChild(option);
+
+        const dlOption = document.createElement('option');
+        dlOption.value = brandName;
+        dataList.appendChild(dlOption);
+      });
+
+      select.value = currentValue;
+    }
+
+    function filterStores() {
+      const selectedStore = document.getElementById('storeFilter').value;
+      activeMarkers.forEach(item => {
+        if (selectedStore === 'ALL' || item.brand === selectedStore) {
+          map.addLayer(item.layer);
+        } else {
+          map.removeLayer(item.layer);
+        }
+      });
+    }
+
+    function loadSavedStores() {
+      renderMarkers();
+
+      fetch(GOOGLE_SCRIPT_URL)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            savedStores = data;
+            localStorage.setItem('myInstalledStoresCache', JSON.stringify(savedStores));
+            renderMarkers();
+          }
+        })
+        .catch(err => console.error("Kunde inte synka med Google Sheets:", err));
+    }
+
+    function addStoreAt(lat, lng, defaultCity = "") {
+      const existingBrands = [...new Set(savedStores.map(s => s.brand))].filter(Boolean).join(", ");
+      let hintText = existingBrands ? `\n(Tidigare sparade: ${existingBrands})` : "";
+      
+      const brand = prompt(`1. Ange Namn/Kedja på butiken (t.ex. Jysk, Dollarstore, Rusta):${hintText}`);
+      if (!brand) return;
+
+      const city = prompt("2. Ange Stad (t.ex. Landskrona):", defaultCity) || "";
+      const installType = prompt("3. Typ av installation (t.ex. Inbrottslarm, Passer, Kamera):") || "";
+      const technician = prompt("4. Utförd av tekniker (t.ex. Ibbe, Ibbe & Johan):") || "";
+
+      const newStore = {
+        action: 'add',
+        id: Date.now().toString(),
+        lat: lat,
+        lng: lng,
+        brand: brand.trim(),
+        city: city.trim(),
+        installType: installType.trim(),
+        technician: technician.trim()
+      };
+
+      savedStores.push(newStore);
+      localStorage.setItem('myInstalledStoresCache', JSON.stringify(savedStores));
+      renderMarkers();
+
+      if (searchMarker) {
+        map.removeLayer(searchMarker);
+        searchMarker = null;
+      }
+
+      fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(newStore)
+      }).then(() => {
+        setTimeout(loadSavedStores, 1500);
+      });
+    }
+
+    let searchTimeout = null;
+    function fetchSuggestions() {
+      const input = document.getElementById('searchInput').value;
+      const suggestionsList = document.getElementById('suggestions');
+      clearTimeout(searchTimeout);
+      if (input.length < 3) { suggestionsList.style.display = 'none'; return; }
+
+      searchTimeout = setTimeout(() => {
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(input)}&addressdetails=1&limit=5`)
+          .then(res => res.json())
+          .then(data => {
+            suggestionsList.innerHTML = '';
+            if (data.length === 0) { suggestionsList.style.display = 'none'; return; }
+            data.forEach(place => {
+              const city = (place.address && (place.address.city || place.address.town || place.address.village)) || "";
+              const li = document.createElement('li');
+              li.textContent = place.display_name;
+              li.onclick = () => showSearchPoint(parseFloat(place.lat), parseFloat(place.lon), place.display_name, city);
+              suggestionsList.appendChild(li);
+            });
+            suggestionsList.style.display = 'block';
+          });
+      }, 300);
+    }
+
+    function performSearch() {
+      const query = document.getElementById('searchInput').value;
+      if (!query) return;
+      document.getElementById('suggestions').style.display = 'none';
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.length > 0) {
+            const place = data[0];
+            const city = (place.address && (place.address.city || place.address.town || place.address.village)) || "";
+            showSearchPoint(parseFloat(place.lat), parseFloat(place.lon), place.display_name, city);
+          } else { alert("Hittade ingen plats."); }
+        });
+    }
+
+    function showSearchPoint(lat, lng, displayName, city) {
+      document.getElementById('suggestions').style.display = 'none';
+      document.getElementById('searchInput').value = displayName;
+      if (searchMarker) map.removeLayer(searchMarker);
+      map.setView([lat, lng], 16);
+      searchMarker = L.circleMarker([lat, lng], { radius: 10, fillColor: "#8a2be2", color: "#ffffff", weight: 3, opacity: 1, fillOpacity: 0.9 }).addTo(map);
+      searchMarker.bindPopup(`<div style="font-size: 13px;"><b>Sökt plats:</b><br>${displayName}<br><br><button onclick="addStoreAt(${lat}, ${lng}, '${city.replace(/'/g, "\\'")}')" style="background:#28a745; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; width: 100%;">+ Spara installation här</button></div>`).openPopup();
+    }
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.search-container')) { document.getElementById('suggestions').style.display = 'none'; }
+    });
+
+    window.removeMarker = function(id) {
+      if (confirm("Vill du ta bort den här markeringen?")) {
+        savedStores = savedStores.filter(s => s.id !== id);
+        localStorage.setItem('myInstalledStoresCache', JSON.stringify(savedStores));
+        renderMarkers();
+
+        fetch(GOOGLE_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'delete', id: id })
+        }).then(() => {
+          setTimeout(loadSavedStores, 1500);
+        });
+      }
+    };
+  </script>
+
+</body>
+</html>
