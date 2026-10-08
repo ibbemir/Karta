@@ -173,6 +173,33 @@
       font-size: 13px; 
       background: #fff;
     }
+
+    /* Snabbfilter-knappar */
+    .quick-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .quick-filter-btn {
+      background: #e9ecef;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      font-weight: 500;
+      color: #495057;
+      flex: 1 1 calc(50% - 4px);
+      text-align: center;
+    }
+    .quick-filter-btn.active {
+      background: #007bff;
+      color: white;
+      border-color: #0056b3;
+      font-weight: bold;
+    }
+
     .legend-grid { display: grid; grid-template-columns: 1fr; gap: 4px; }
     .legend-item { display: flex; align-items: center; font-size: 12px; }
     .color-dot { 
@@ -330,7 +357,7 @@
 
   <div class="search-container">
     <div class="search-box">
-      <input type="text" id="searchInput" placeholder="Sök adress/stad..." oninput="fetchSuggestions()" onkeypress="if(event.key === 'Enter') performSearch()">
+      <input type="text" id="searchInput" placeholder="Sök adress, tekniker, typ eller namn..." oninput="handleSearchInput()" onkeypress="if(event.key === 'Enter') performSearch()">
       <button onclick="performSearch()">Sök</button>
     </div>
     <ul id="suggestions" class="suggestions-list"></ul>
@@ -358,6 +385,14 @@
         <select id="storeFilter" onchange="filterStores()">
           <option value="ALL">-- Visa alla installationer --</option>
         </select>
+
+        <label style="font-weight: bold; font-size: 12px; display: block; margin-top: 8px; margin-bottom: 4px;">Snabbfilter typ:</label>
+        <div class="quick-filters">
+          <button class="quick-filter-btn active" onclick="setQuickFilter('ALL', this)">Alla</button>
+          <button class="quick-filter-btn" onclick="setQuickFilter('larm', this)">Larm</button>
+          <button class="quick-filter-btn" onclick="setQuickFilter('passer', this)">Passer</button>
+          <button class="quick-filter-btn" onclick="setQuickFilter('kamera', this)">Kamera</button>
+        </div>
       </div>
       <hr>
       <h3>Färgkodning</h3>
@@ -386,6 +421,7 @@
     let searchMarker = null;
     let activeMarkers = [];
     let pendingCoords = null;
+    let activeTypeFilter = 'ALL';
 
     function checkPassword() {
       const input = document.getElementById('passwordInput').value;
@@ -489,12 +525,19 @@
       activeMarkers = [];
 
       savedStores.forEach(store => {
-        // Om gamla T.Hansen finns i sparade data, mappa om visningen till Thansen
         let displayBrand = store.brand;
         if (displayBrand === "T.Hansen") displayBrand = "Thansen";
 
         const m = createCustomMarker(store.id, store.lat, store.lng, displayBrand, store.city, store.installType, store.technician, store.customName);
-        activeMarkers.push({ id: store.id, brand: displayBrand, layer: m });
+        activeMarkers.push({ 
+          id: store.id, 
+          brand: displayBrand, 
+          customName: store.customName || '',
+          city: store.city || '',
+          installType: store.installType || '',
+          technician: store.technician || '',
+          layer: m 
+        });
       });
 
       updateStoreFilterList();
@@ -555,15 +598,39 @@
       select.value = currentValue;
     }
 
+    function setQuickFilter(type, btnElem) {
+      activeTypeFilter = type;
+      document.querySelectorAll('.quick-filter-btn').forEach(btn => btn.classList.remove('active'));
+      btnElem.classList.add('active');
+      filterStores();
+    }
+
     function filterStores() {
       const selectedStore = document.getElementById('storeFilter').value;
+      const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
+
       activeMarkers.forEach(item => {
-        if (selectedStore === 'ALL' || item.brand === selectedStore) {
+        // 1. Filter per Kedja
+        const matchesBrand = (selectedStore === 'ALL' || item.brand === selectedStore);
+
+        // 2. Filter per Typ (Snabbfilter)
+        const matchesType = (activeTypeFilter === 'ALL' || item.installType.toLowerCase().includes(activeTypeFilter));
+
+        // 3. Filter per Fritextsökning (Sökfältsdata: Namn, Tekniker, Stad, Typ, Kedja)
+        const fullText = `${item.brand} ${item.customName} ${item.city} ${item.installType} ${item.technician}`.toLowerCase();
+        const matchesSearch = (!searchVal || fullText.includes(searchVal));
+
+        if (matchesBrand && matchesType && matchesSearch) {
           map.addLayer(item.layer);
         } else {
           map.removeLayer(item.layer);
         }
       });
+    }
+
+    function handleSearchInput() {
+      filterStores();
+      fetchSuggestions();
     }
 
     function loadSavedStores() {
