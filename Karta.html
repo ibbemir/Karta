@@ -335,7 +335,7 @@
           <option value="Dollarstore">Dollarstore</option>
           <option value="Thansen">Thansen</option>
           <option value="Granngården">Granngården</option>
-          <option value="Privatpersoner">Privatperson</option>
+          <option value="Privatpersoner">Privatpersoner</option>
           <option value="Övriga företag">Övriga företag</option>
           <option value="CUSTOM">-- Annat (Skriv eget) --</option>
         </select>
@@ -357,8 +357,29 @@
       </div>
 
       <div class="modal-field">
-        <label for="modalInstallType">Typ av installation:</label>
-        <input type="text" id="modalInstallType" placeholder="t.ex. Inbrottslarm, Passer, Kamera">
+        <label for="modalInstallType">2. Typ av installation:</label>
+        <select id="modalInstallType" onchange="handleInstallTypeChange()">
+          <option value="Larm">🛡️ Larm</option>
+          <option value="Kamera">📷 Kamera</option>
+          <option value="Passer">🔑 Passer</option>
+          <option value="Lås">🔒 Lås</option>
+          <option value="Larm & Kamera">🛡️📷 Larm & Kamera</option>
+          <option value="Larm & Passer">🛡️🔑 Larm & Passer</option>
+          <option value="Kamera & Passer">📷🔑 Kamera & Passer</option>
+          <option value="Passer & Lås">🔑🔒 Passer & Lås</option>
+          <option value="Komplett (Larm, Kamera, Passer & Lås)">🛡️📷🔑🔒 Komplett system</option>
+          <option value="CUSTOM_TYPE">-- Annat (Skriv eget) --</option>
+        </select>
+      </div>
+
+      <div class="modal-field" id="customTypeGroup" style="display: none;">
+        <label for="modalCustomInstallType">Ange egen installationstyp:</label>
+        <input type="text" id="modalCustomInstallType" placeholder="t.ex. Dimmaskin, Brandlarm...">
+      </div>
+
+      <div class="modal-field">
+        <label for="modalHardwareBrand">Fabrikat / Modell (märke på utrustning):</label>
+        <input type="text" id="modalHardwareBrand" placeholder="t.ex. Hikvision, DSC Neo, Paxton, STEP Lock...">
       </div>
 
       <div class="modal-field">
@@ -368,7 +389,7 @@
 
       <div class="modal-field">
         <label for="modalNotes">Anteckningar / LC-ID / Koder:</label>
-        <textarea id="modalNotes" rows="3" placeholder="Särskilda instruktioner, abonnemangsnummer etc..."></textarea>
+        <textarea id="modalNotes" rows="3" placeholder="Särskilda instruktioner, abonnemangsnummer, sektioner etc..."></textarea>
       </div>
 
       <div class="modal-buttons">
@@ -380,7 +401,7 @@
 
   <div class="search-container">
     <div class="search-box">
-      <input type="text" id="searchInput" placeholder="Sök adress, tekniker, typ eller namn..." oninput="handleSearchInput()" onkeypress="if(event.key === 'Enter') performSearch()">
+      <input type="text" id="searchInput" placeholder="Sök adress, tekniker, modell, typ..." oninput="handleSearchInput()" onkeypress="if(event.key === 'Enter') performSearch()">
       <button onclick="performSearch()">Sök</button>
     </div>
     <ul id="suggestions" class="suggestions-list"></ul>
@@ -413,8 +434,9 @@
         <div class="quick-filters">
           <button class="quick-filter-btn active" onclick="setQuickFilter('ALL', this)">Alla</button>
           <button class="quick-filter-btn" onclick="setQuickFilter('larm', this)">Larm</button>
-          <button class="quick-filter-btn" onclick="setQuickFilter('passer', this)">Passer</button>
           <button class="quick-filter-btn" onclick="setQuickFilter('kamera', this)">Kamera</button>
+          <button class="quick-filter-btn" onclick="setQuickFilter('passer', this)">Passer</button>
+          <button class="quick-filter-btn" onclick="setQuickFilter('lås', this)">Lås</button>
         </div>
 
         <button class="btn-export" onclick="exportToCSV()">📥 Exportera till CSV (Excel)</button>
@@ -503,13 +525,14 @@
       return { type: 'solid', color: '#888888' };
     }
 
-    // Funktion 3: Välj Ikon baserat på installationstyp (Larm, Kamera, Passer)
     function getTypeSymbol(installType) {
       const type = (installType || "").toLowerCase();
-      if (type.includes("kamera") || type.includes("cctv")) return "📷";
-      if (type.includes("passer") || type.includes("lås") || type.includes("passagesystem")) return "🔑";
-      if (type.includes("larm") || type.includes("inbrott")) return "🛡️";
-      return ""; // Standard prick om ingen matchar
+      let symbols = "";
+      if (type.includes("larm") || type.includes("inbrott")) symbols += "🛡️";
+      if (type.includes("kamera") || type.includes("cctv")) symbols += "📷";
+      if (type.includes("passer")) symbols += "🔑";
+      if (type.includes("lås")) symbols += "🔒";
+      return symbols;
     }
 
     function createMarkerIcon(brandName, installType) {
@@ -517,7 +540,7 @@
       const symbol = getTypeSymbol(installType);
 
       let innerContent = symbol 
-        ? `<text x="11" y="15" font-size="11" text-anchor="middle">${symbol}</text>` 
+        ? `<text x="11" y="15" font-size="9" text-anchor="middle">${symbol}</text>` 
         : ``;
 
       let svgHtml = '';
@@ -538,7 +561,7 @@
       return L.divIcon({ html: svgHtml, className: 'custom-svg-icon', iconSize: [24, 24], iconAnchor: [12, 12] });
     }
 
-    function createCustomMarker(id, lat, lng, brand, city, installType, technician, customName, notes, noteLog) {
+    function createCustomMarker(id, lat, lng, brand, city, installType, technician, customName, notes, noteLog, hardwareBrand) {
       const icon = createMarkerIcon(brand, installType);
       const marker = L.marker([lat, lng], { icon: icon }).addTo(map);
 
@@ -561,10 +584,11 @@
       }
 
       const popupContent = `
-        <div style="font-size: 13px; min-width: 170px;">
+        <div style="font-size: 13px; min-width: 175px;">
           <b style="font-size: 14px;">${displayName}</b> ${city ? '(' + city + ')' : ''}<br>
           <p style="margin: 3px 0; color: #666; font-size: 11px;"><b>Kategori:</b> ${brand || 'Övriga företag'}</p>
           <p style="margin: 3px 0; color: #444;"><b>Installation:</b> ${installType || 'Ej angivet'}</p>
+          ${hardwareBrand ? `<p style="margin: 3px 0; color: #444;"><b>Märke/Fabrikat:</b> ${hardwareBrand}</p>` : ''}
           <p style="margin: 3px 0; color: #444;"><b>Tekniker:</b> ${technician || 'Ej angivet'}</p>
           ${notesHtml}
           <a href="${mapsUrl}" target="_blank" style="display: block; text-align: center; background: #28a745; color: white; text-decoration: none; padding: 5px; border-radius: 4px; font-weight: bold; margin-top: 6px; margin-bottom: 6px;">🚗 Hitta hit (Google Maps)</a>
@@ -589,13 +613,14 @@
         let displayBrand = store.brand;
         if (displayBrand === "T.Hansen") displayBrand = "Thansen";
 
-        const m = createCustomMarker(store.id, store.lat, store.lng, displayBrand, store.city, store.installType, store.technician, store.customName, store.notes, store.noteLog);
+        const m = createCustomMarker(store.id, store.lat, store.lng, displayBrand, store.city, store.installType, store.technician, store.customName, store.notes, store.noteLog, store.hardwareBrand);
         activeMarkers.push({ 
           id: store.id, 
           brand: displayBrand, 
           customName: store.customName || '',
           city: store.city || '',
           installType: store.installType || '',
+          hardwareBrand: store.hardwareBrand || '',
           technician: store.technician || '',
           notes: store.notes || '',
           layer: m 
@@ -674,7 +699,7 @@
       activeMarkers.forEach(item => {
         const matchesBrand = (selectedStore === 'ALL' || item.brand === selectedStore);
         const matchesType = (activeTypeFilter === 'ALL' || item.installType.toLowerCase().includes(activeTypeFilter));
-        const fullText = `${item.brand} ${item.customName} ${item.city} ${item.installType} ${item.technician} ${item.notes}`.toLowerCase();
+        const fullText = `${item.brand} ${item.customName} ${item.city} ${item.installType} ${item.hardwareBrand} ${item.technician} ${item.notes}`.toLowerCase();
         const matchesSearch = (!searchVal || fullText.includes(searchVal));
 
         if (matchesBrand && matchesType && matchesSearch) {
@@ -705,7 +730,6 @@
         .catch(err => console.error("Kunde inte synka med Google Sheets:", err));
     }
 
-    // Modal-hantering för Ny / Redigera
     function openAddModal(lat, lng, defaultCity = "") {
       pendingCoords = { lat, lng };
       document.getElementById('editingId').value = '';
@@ -714,14 +738,16 @@
       document.getElementById('modalCustomBrand').value = '';
       document.getElementById('modalName').value = '';
       document.getElementById('modalCity').value = defaultCity;
-      document.getElementById('modalInstallType').value = '';
+      document.getElementById('modalInstallType').value = 'Larm';
+      document.getElementById('modalCustomInstallType').value = '';
+      document.getElementById('modalHardwareBrand').value = '';
       document.getElementById('modalTechnician').value = '';
       document.getElementById('modalNotes').value = '';
       handleCategoryChange();
+      handleInstallTypeChange();
       document.getElementById('addModal').style.display = 'flex';
     }
 
-    // Funktion 5: Redigera befintlig markering
     window.editMarker = function(id) {
       const item = savedStores.find(s => s.id === id);
       if (!item) return;
@@ -741,11 +767,22 @@
 
       document.getElementById('modalName').value = item.customName || '';
       document.getElementById('modalCity').value = item.city || '';
-      document.getElementById('modalInstallType').value = item.installType || '';
+
+      const stdTypes = ["Larm", "Kamera", "Passer", "Lås", "Larm & Kamera", "Larm & Passer", "Kamera & Passer", "Passer & Lås", "Komplett (Larm, Kamera, Passer & Lås)"];
+      if (stdTypes.includes(item.installType)) {
+        document.getElementById('modalInstallType').value = item.installType;
+        document.getElementById('modalCustomInstallType').value = '';
+      } else {
+        document.getElementById('modalInstallType').value = 'CUSTOM_TYPE';
+        document.getElementById('modalCustomInstallType').value = item.installType || '';
+      }
+
+      document.getElementById('modalHardwareBrand').value = item.hardwareBrand || '';
       document.getElementById('modalTechnician').value = item.technician || '';
       document.getElementById('modalNotes').value = item.notes || '';
 
       handleCategoryChange();
+      handleInstallTypeChange();
       document.getElementById('addModal').style.display = 'flex';
     };
 
@@ -764,7 +801,16 @@
       }
     }
 
-    // Funktion 2 & 5: Spara ny eller redigerad installation med automatisk tidsstämpel och användare
+    function handleInstallTypeChange() {
+      const typeVal = document.getElementById('modalInstallType').value;
+      const customGroup = document.getElementById('customTypeGroup');
+      if (typeVal === 'CUSTOM_TYPE') {
+        customGroup.style.display = 'block';
+      } else {
+        customGroup.style.display = 'none';
+      }
+    }
+
     function saveNewInstallation() {
       if (!pendingCoords) return;
 
@@ -777,30 +823,35 @@
 
       const customName = document.getElementById('modalName').value.trim();
       const city = document.getElementById('modalCity').value.trim();
-      const installType = document.getElementById('modalInstallType').value.trim();
+      
+      const typeSelect = document.getElementById('modalInstallType').value;
+      let installType = typeSelect;
+      if (typeSelect === 'CUSTOM_TYPE') {
+        installType = document.getElementById('modalCustomInstallType').value.trim() || 'Ej angivet';
+      }
+
+      const hardwareBrand = document.getElementById('modalHardwareBrand').value.trim();
       const technician = document.getElementById('modalTechnician').value.trim();
       const notes = document.getElementById('modalNotes').value.trim();
 
-      // Skapa tidsstämpel för antecknings-logg
       const now = new Date();
       const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
       const noteAuthor = technician || "Okänd tekniker";
       const noteLog = notes ? `Sparad av ${noteAuthor} (${timeStr})` : '';
 
       if (editId) {
-        // Redigera befintlig
         const index = savedStores.findIndex(s => s.id === editId);
         if (index !== -1) {
           savedStores[index].brand = brand;
           savedStores[index].customName = customName;
           savedStores[index].city = city;
           savedStores[index].installType = installType;
+          savedStores[index].hardwareBrand = hardwareBrand;
           savedStores[index].technician = technician;
           savedStores[index].notes = notes;
           savedStores[index].noteLog = noteLog;
         }
       } else {
-        // Skapa ny
         const newStore = {
           action: 'add',
           id: Date.now().toString(),
@@ -810,6 +861,7 @@
           customName: customName,
           city: city,
           installType: installType,
+          hardwareBrand: hardwareBrand,
           technician: technician,
           notes: notes,
           noteLog: noteLog
@@ -827,7 +879,6 @@
 
       closeAddModal();
 
-      // Synka till Google Sheets
       const storeToSave = savedStores.find(s => s.id === (editId || savedStores[savedStores.length - 1].id));
       fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
@@ -839,15 +890,14 @@
       });
     }
 
-    // Funktion 4: Exportera alla installationer till CSV (Excel)
     function exportToCSV() {
       if (savedStores.length === 0) {
         alert("Det finns inga installationer att exportera ännu.");
         return;
       }
 
-      let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // UTF-8 BOM för svenska tecken i Excel
-      csvContent += "Kategori/Kedja,Namn,Stad,Installationstyp,Tekniker,Anteckningar,Anteckningslogg,Latitud,Longitud\n";
+      let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+      csvContent += "Kategori/Kedja,Namn,Stad,Installationstyp,Märke/Fabrikat,Tekniker,Anteckningar,Anteckningslogg,Latitud,Longitud\n";
 
       savedStores.forEach(s => {
         const row = [
@@ -855,6 +905,7 @@
           `"${s.customName || ''}"`,
           `"${s.city || ''}"`,
           `"${s.installType || ''}"`,
+          `"${s.hardwareBrand || ''}"`,
           `"${s.technician || ''}"`,
           `"${(s.notes || '').replace(/"/g, '""')}"`,
           `"${s.noteLog || ''}"`,
