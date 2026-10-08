@@ -293,17 +293,6 @@
       hr { margin: 6px 0; }
     }
 
-    .leaflet-tooltip.custom-tooltip { 
-      background-color: #333333; 
-      color: #ffffff; 
-      border: none; 
-      border-radius: 6px; 
-      padding: 5px 8px; 
-      font-size: 12px; 
-      font-weight: bold; 
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3); 
-    }
-    .leaflet-tooltip-top.custom-tooltip::before { border-top-color: #333333; }
     .custom-svg-icon { background: none; border: none; }
   </style>
 </head>
@@ -569,11 +558,6 @@
         displayName = store.brand + " – " + store.customName;
       }
 
-      const labelText = store.city ? displayName + ' (' + store.city + ')' : displayName;
-      
-      // Sätt etikett som inte överlappar
-      marker.bindTooltip(labelText, { permanent: false, direction: 'top', offset: [0, -10], className: 'custom-tooltip' });
-
       const mapsUrl = "https://www.google.com/maps/dir/?api=1&destination=" + store.lat + "," + store.lng;
 
       let notesHtml = '';
@@ -601,12 +585,6 @@
       '</div>';
 
       marker.bindPopup(popupContent);
-      
-      // Tvinga fram popupen direkt vid klick
-      marker.on('click', function() {
-        marker.openPopup();
-      });
-
       return marker;
     }
 
@@ -637,7 +615,7 @@
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'add', ...item })
+        body: JSON.stringify({ action: 'edit', ...item })
       }).then(() => {
         setTimeout(loadSavedStores, 1500);
       });
@@ -750,8 +728,6 @@
     }
 
     function loadSavedStores() {
-      renderMarkers();
-
       fetch(GOOGLE_SCRIPT_URL)
         .then(res => res.json())
         .then(data => {
@@ -868,7 +844,10 @@
       const technician = document.getElementById('modalTechnician').value.trim();
       const notes = document.getElementById('modalNotes').value.trim();
 
+      let actionType = 'add';
+
       if (editId) {
+        actionType = 'edit';
         const index = savedStores.findIndex(s => String(s.id) === String(editId));
         if (index !== -1) {
           savedStores[index].brand = brand;
@@ -881,7 +860,6 @@
         }
       } else {
         const newStore = {
-          action: 'add',
           id: Date.now().toString(),
           lat: pendingCoords.lat,
           lng: pendingCoords.lng,
@@ -911,7 +889,7 @@
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'add', ...storeToSave })
+        body: JSON.stringify({ action: actionType, ...storeToSave })
       }).then(() => {
         setTimeout(loadSavedStores, 1500);
       });
