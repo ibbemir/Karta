@@ -487,7 +487,7 @@
   <script>
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz8-AmljzLJ1k23vVAKuHarQQKX_5jmpNBh6jjOXsJKpSsi504PXjj8_z8Ni8QWsPEF/exec";
     const APP_PASSWORD = "Seesafe2026";
-    const CACHE_KEY = "myInstalledStoresCache_v6";
+    const CACHE_KEY = "myInstalledStoresCache_v7";
 
     let map = null;
     let savedStores = JSON.parse(localStorage.getItem(CACHE_KEY)) || [];
@@ -517,6 +517,12 @@
         unlockMap();
       }
     });
+
+    function parseCoord(val) {
+      if (typeof val === 'number') return val;
+      if (!val) return 0;
+      return parseFloat(String(val).replace(',', '.'));
+    }
 
     function initMap() {
       if (map) return;
@@ -588,15 +594,20 @@
     }
 
     function createCustomMarker(store) {
+      const latNum = parseCoord(store.lat);
+      const lngNum = parseCoord(store.lng);
+
+      if (!latNum || !lngNum) return null;
+
       const icon = createMarkerIcon(store.brand, store.installType);
-      const marker = L.marker([store.lat, store.lng], { icon: icon }).addTo(map);
+      const marker = L.marker([latNum, lngNum], { icon: icon }).addTo(map);
 
       let displayName = store.customName || store.brand || "Installation";
       if (store.customName && store.brand && store.brand !== store.customName && store.brand !== "Övriga företag") {
         displayName = store.brand + " – " + store.customName;
       }
 
-      const mapsUrl = "https://www.google.com/maps/dir/?api=1&destination=" + store.lat + "," + store.lng;
+      const mapsUrl = "https://www.google.com/maps/dir/?api=1&destination=" + latNum + "," + lngNum;
 
       const hasNotes = store.notes && String(store.notes).trim() !== '';
 
@@ -684,8 +695,8 @@
       const payload = {
         action: actionType,
         id: String(storeData.id || ''),
-        lat: String(storeData.lat || ''),
-        lng: String(storeData.lng || ''),
+        lat: String(storeData.lat || '').replace(',', '.'),
+        lng: String(storeData.lng || '').replace(',', '.'),
         brand: String(storeData.brand || ''),
         customName: String(storeData.customName || storeData.costumName || ''),
         city: String(storeData.city || ''),
@@ -713,17 +724,19 @@
         if (displayBrand === "T.Hansen") displayBrand = "Thansen";
 
         const m = createCustomMarker(store);
-        activeMarkers.push({ 
-          id: store.id, 
-          brand: displayBrand, 
-          customName: store.customName || store.costumName || '',
-          city: store.city || '',
-          installType: store.installType || '',
-          hardwareBrand: store.hardwareBrand || '',
-          technician: store.technician || '',
-          notes: store.notes || '',
-          layer: m 
-        });
+        if (m) {
+          activeMarkers.push({ 
+            id: store.id, 
+            brand: displayBrand, 
+            customName: store.customName || store.costumName || '',
+            city: store.city || '',
+            installType: store.installType || '',
+            hardwareBrand: store.hardwareBrand || '',
+            technician: store.technician || '',
+            notes: store.notes || '',
+            layer: m 
+          });
+        }
       });
 
       updateStoreFilterList();
@@ -821,6 +834,8 @@
           if (Array.isArray(data)) {
             savedStores = data.map(item => ({
               ...item,
+              lat: parseCoord(item.lat),
+              lng: parseCoord(item.lng),
               customName: item.customName || item.costumName || ''
             }));
             localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
@@ -831,7 +846,7 @@
     }
 
     function openAddModal(lat, lng, defaultCity = "") {
-      pendingCoords = { lat, lng };
+      pendingCoords = { lat: parseCoord(lat), lng: parseCoord(lng) };
       document.getElementById('editingId').value = '';
       document.getElementById('modalTitle').textContent = '➕ Ny installation';
       document.getElementById('modalCategory').value = 'Jysk';
@@ -852,7 +867,7 @@
       const item = savedStores.find(s => String(s.id) === String(id));
       if (!item) return;
 
-      pendingCoords = { lat: item.lat, lng: item.lng };
+      pendingCoords = { lat: parseCoord(item.lat), lng: parseCoord(item.lng) };
       document.getElementById('editingId').value = item.id;
       document.getElementById('modalTitle').textContent = '✏️ Redigera installation';
 
