@@ -54,7 +54,7 @@
     }
     .login-error { color: #d9534f; font-size: 13px; margin-top: 8px; display: none; }
 
-    /* Modal för ny / redigera installation & anteckning */
+    /* Modaler */
     .modal-overlay {
       position: fixed;
       top: 0; left: 0; width: 100vw; height: 100vh;
@@ -177,7 +177,6 @@
       background: #fff;
     }
 
-    /* Snabbfilter-knappar */
     .quick-filters {
       display: flex;
       flex-wrap: wrap;
@@ -243,7 +242,6 @@
     }
     .color-dot.dollarstore { background: linear-gradient(90deg, #ffd700 50%, #ff4d4d 50%); }
 
-    /* Statistik-sektion */
     .stats-container {
       background: #f8f9fa;
       border: 1px solid #e9ecef;
@@ -322,7 +320,7 @@
     </div>
   </div>
 
-  <!-- Modal för att lägga till/redigera installation -->
+  <!-- Modal för ny/redigera installation -->
   <div id="addModal" class="modal-overlay">
     <div class="modal-box">
       <h3 id="modalTitle">➕ Ny installation</h3>
@@ -401,24 +399,27 @@
     </div>
   </div>
 
-  <!-- Egen popup-ruta för Snabb-anteckningar -->
+  <!-- Modal för Anteckningar -->
   <div id="quickNoteModal" class="modal-overlay">
     <div class="modal-box">
-      <h3>➕ Lägg till anteckning</h3>
+      <h3>📋 Anteckningar & Logg</h3>
       <input type="hidden" id="noteTargetId" value="">
 
-      <div class="modal-field">
-        <label for="noteTechName">Tekniker:</label>
-        <input type="text" id="noteTechName" placeholder="Ditt namn (t.ex. Ibbe)">
+      <div id="existingNotesContainer" style="background: #fff8dc; border-left: 3px solid #f0ad4e; padding: 8px; margin-bottom: 12px; font-size: 12px; max-height: 150px; overflow-y: auto; display: none; color: #333;">
       </div>
 
       <div class="modal-field">
-        <label for="noteText">Anteckning:</label>
+        <label for="noteTechName">Tekniker (Ditt namn):</label>
+        <input type="text" id="noteTechName" placeholder="Ibbe">
+      </div>
+
+      <div class="modal-field">
+        <label for="noteText">Ny anteckning:</label>
         <textarea id="noteText" rows="3" placeholder="Skriv din anteckning här..."></textarea>
       </div>
 
       <div class="modal-buttons">
-        <button class="btn-cancel" onclick="closeQuickNoteModal()">Avbryt</button>
+        <button class="btn-cancel" onclick="closeQuickNoteModal()">Stäng</button>
         <button class="btn-save" onclick="saveQuickNote()">Spara anteckning</button>
       </div>
     </div>
@@ -438,7 +439,6 @@
     <button class="toggle-panel-btn" onclick="togglePanel()">📋 Visa/Dölj Filter & Meny</button>
     
     <div id="panelContent" class="panel-content">
-      <!-- Statistikpanel -->
       <div class="stats-container">
         <div class="stats-title">
           <span>📊 Statistik:</span>
@@ -464,7 +464,7 @@
           <button class="quick-filter-btn" onclick="setQuickFilter('lås', this)">Lås</button>
         </div>
 
-        <button class="btn-sync" onclick="forceSyncFromSheet()">🔄 Synka / Rensa minne</button>
+        <button class="btn-sync" onclick="forceSyncFromSheet()">🔄 Synka med Google Sheets</button>
         <button class="btn-export" onclick="exportToCSV()">📥 Exportera till CSV (Excel)</button>
       </div>
       <hr>
@@ -487,7 +487,7 @@
   <script>
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz8-AmljzLJ1k23vVAKuHarQQKX_5jmpNBh6jjOXsJKpSsi504PXjj8_z8Ni8QWsPEF/exec";
     const APP_PASSWORD = "Seesafe2026";
-    const CACHE_KEY = "myInstalledStoresCache_v2";
+    const CACHE_KEY = "myInstalledStoresCache_v3";
 
     let map = null;
     let savedStores = JSON.parse(localStorage.getItem(CACHE_KEY)) || [];
@@ -513,9 +513,6 @@
     }
 
     window.addEventListener('DOMContentLoaded', () => {
-      // Rensa gamla versioner av cache
-      localStorage.removeItem('myInstalledStoresCache');
-      
       if (localStorage.getItem('map_auth_token') === APP_PASSWORD) {
         unlockMap();
       }
@@ -601,14 +598,15 @@
 
       const mapsUrl = "https://www.google.com/maps/dir/?api=1&destination=" + store.lat + "," + store.lng;
 
-      let notesHtml = '';
-      if (store.notes && String(store.notes).trim() !== '') {
-        const formattedNotes = String(store.notes).trim().replace(/\n/g, '<br>');
-        notesHtml = '<div style="background: #fff8dc; border-left: 3px solid #f0ad4e; padding: 6px 8px; margin: 6px 0; font-size: 11px; border-radius: 4px; max-height: 120px; overflow-y: auto; color: #333;">' +
-          '<b style="display:block; margin-bottom: 2px;">📋 Anteckningar & Logg:</b>' +
-          formattedNotes +
-        '</div>';
-      }
+      const hasNotes = store.notes && String(store.notes).trim() !== '';
+
+      /* Anpassad knapp beroende på om det finns anteckningar */
+      let noteBtnStyle = hasNotes 
+        ? 'background: #f0ad4e; color: black;' 
+        : 'background: #28a745; color: white;';
+      let noteBtnText = hasNotes 
+        ? '✅ Anteckningar (Finns sparade)' 
+        : '➕ Lägg till anteckning';
 
       const popupContent = '<div style="font-size: 13px; min-width: 190px;">' +
         '<b style="font-size: 14px;">' + displayName + '</b> ' + (store.city ? '(' + store.city + ')' : '') + '<br>' +
@@ -616,8 +614,7 @@
         '<p style="margin: 3px 0; color: #444;"><b>Installation:</b> ' + (store.installType || 'Ej angivet') + '</p>' +
         (store.hardwareBrand ? '<p style="margin: 3px 0; color: #444;"><b>Märke/Fabrikat:</b> ' + store.hardwareBrand + '</p>' : '') +
         '<p style="margin: 3px 0; color: #444;"><b>Tekniker:</b> ' + (store.technician || 'Ej angivet') + '</p>' +
-        notesHtml +
-        '<button onclick="openQuickNoteModal(\'' + store.id + '\')" style="width: 100%; background: #28a745; color: white; border: none; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 6px; margin-bottom: 6px;">➕ Lägg till anteckning</button>' +
+        '<button onclick="openQuickNoteModal(\'' + store.id + '\')" style="width: 100%; ' + noteBtnStyle + ' border: none; padding: 7px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 6px; margin-bottom: 6px;">' + noteBtnText + '</button>' +
         '<a href="' + mapsUrl + '" target="_blank" style="display: block; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 5px; border-radius: 4px; font-weight: bold; font-size: 12px; margin-bottom: 6px;">🚗 Hitta hit (Google Maps)</a>' +
         '<div style="display: flex; gap: 4px;">' +
           '<button onclick="editMarker(\'' + store.id + '\')" style="flex: 1; background:#6c757d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 11px;">✏️ Redigera</button>' +
@@ -636,6 +633,15 @@
       document.getElementById('noteTargetId').value = id;
       document.getElementById('noteTechName').value = item.technician || "Ibbe";
       document.getElementById('noteText').value = '';
+
+      const container = document.getElementById('existingNotesContainer');
+      if (item.notes && String(item.notes).trim() !== '') {
+        container.innerHTML = '<b>Tidigare anteckningar:</b><br>' + String(item.notes).trim().replace(/\n/g, '<br>');
+        container.style.display = 'block';
+      } else {
+        container.style.display = 'none';
+      }
+
       document.getElementById('quickNoteModal').style.display = 'flex';
     };
 
@@ -648,23 +654,19 @@
       const techName = document.getElementById('noteTechName').value.trim() || 'Tekniker';
       const noteText = document.getElementById('noteText').value.trim();
 
-      if (!noteText) {
-        alert("Skriv in en anteckning först!");
-        return;
-      }
-
       const item = savedStores.find(s => String(s.id) === String(id));
       if (!item) return;
 
-      const now = new Date();
-      const timeStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-      
-      const entry = '• [' + timeStr + ' - ' + techName + ']: ' + noteText;
+      if (noteText) {
+        const now = new Date();
+        const timeStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+        const entry = '• [' + timeStr + ' - ' + techName + ']: ' + noteText;
 
-      if (item.notes && String(item.notes).trim()) {
-        item.notes = entry + "\n" + String(item.notes).trim();
-      } else {
-        item.notes = entry;
+        if (item.notes && String(item.notes).trim()) {
+          item.notes = entry + "\n" + String(item.notes).trim();
+        } else {
+          item.notes = entry;
+        }
       }
 
       localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
@@ -713,9 +715,8 @@
     }
 
     function forceSyncFromSheet() {
-      localStorage.removeItem(CACHE_KEY);
       loadSavedStores();
-      alert("Minnet har rensats och kartan har synkats på nytt med kalkylarket!");
+      alert("Hämtar senaste informationen från Google Sheets...");
     }
 
     function updateStatistics() {
