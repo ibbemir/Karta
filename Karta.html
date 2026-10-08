@@ -117,7 +117,7 @@
       padding: 12px 14px; 
       border-radius: 10px; 
       box-shadow: 0 2px 12px rgba(0,0,0,0.25); 
-      width: 260px;
+      width: 270px;
       max-height: 85vh;
       overflow-y: auto;
       transition: all 0.3s ease;
@@ -146,6 +146,37 @@
     }
     .color-dot.dollarstore { background: linear-gradient(90deg, #ffd700 50%, #ff4d4d 50%); }
 
+    /* Statistik-sektion */
+    .stats-container {
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+    }
+    .stats-title {
+      font-size: 12px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .stats-list {
+      font-size: 11px;
+      color: #555;
+      max-height: 120px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .stats-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 0;
+      border-bottom: 1px dashed #eee;
+    }
+    .stats-item:last-child { border-bottom: none; }
+
     .toggle-panel-btn {
       display: none;
       width: 100%;
@@ -168,7 +199,7 @@
         left: 10px;
         right: 10px;
         width: auto;
-        max-height: 40vh;
+        max-height: 45vh;
         padding: 10px;
         border-radius: 12px;
       }
@@ -221,6 +252,17 @@
     <button class="toggle-panel-btn" onclick="togglePanel()">📋 Visa/Dölj Filter & Meny</button>
     
     <div id="panelContent" class="panel-content">
+      <!-- Statistikpanel -->
+      <div class="stats-container">
+        <div class="stats-title">
+          <span>📊 Statistik:</span>
+          <span id="totalCountBadge" style="color: #007bff;">Totalt: 0</span>
+        </div>
+        <div id="statsList" class="stats-list">
+          <div style="text-align: center; color: #999; padding: 4px;">Laddar...</div>
+        </div>
+      </div>
+
       <div class="filter-section">
         <label for="storeFilter" style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 4px;">Visa kedja/butik:</label>
         <select id="storeFilter" onchange="filterStores()">
@@ -358,7 +400,42 @@
       });
 
       updateStoreLists();
+      updateStatistics();
       filterStores();
+    }
+
+    function updateStatistics() {
+      const statsList = document.getElementById('statsList');
+      const totalBadge = document.getElementById('totalCountBadge');
+      
+      totalBadge.textContent = `Totalt: ${savedStores.length}`;
+
+      if (savedStores.length === 0) {
+        statsList.innerHTML = '<div style="text-align: center; color: #999; padding: 4px;">Inga installationer ännu.</div>';
+        return;
+      }
+
+      // Räkna antal per kedja/brand
+      const brandCounts = {};
+      savedStores.forEach(store => {
+        const brand = (store.brand || "Ej angivet").trim();
+        brandCounts[brand] = (brandCounts[brand] || 0) + 1;
+      });
+
+      // Sortera efter antal (flest först)
+      const sortedBrands = Object.entries(brandCounts).sort((a, b) => b[1] - a[1]);
+
+      let html = '';
+      sortedBrands.forEach(([brand, count]) => {
+        html += `
+          <div class="stats-item">
+            <span>${brand}</span>
+            <b style="color: #333;">${count} st</b>
+          </div>
+        `;
+      });
+
+      statsList.innerHTML = html;
     }
 
     function updateStoreLists() {
