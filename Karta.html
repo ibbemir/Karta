@@ -561,7 +561,8 @@
       return L.divIcon({ html: svgHtml, className: 'custom-svg-icon', iconSize: [24, 24], iconAnchor: [12, 12] });
     }
 
-    function createCustomMarker(id, lat, lng, brand, city, installType, technician, customName, notes, noteLog, hardwareBrand) {
+    function createCustomMarker(store) {
+      const { id, lat, lng, brand, city, installType, technician, customName, notes, hardwareBrand } = store;
       const icon = createMarkerIcon(brand, installType);
       const marker = L.marker([lat, lng], { icon: icon }).addTo(map);
 
@@ -576,8 +577,8 @@
       const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 
       let notesHtml = '';
-      if (notes) {
-        const formattedNotes = notes.replace(/\n/g, '<br>');
+      if (notes && notes.trim() !== '') {
+        const formattedNotes = notes.trim().replace(/\n/g, '<br>');
         notesHtml = `<div style="background: #fff8dc; border-left: 3px solid #f0ad4e; padding: 6px 8px; margin: 6px 0; font-size: 11px; border-radius: 4px; max-height: 120px; overflow-y: auto; color: #333;">
           <b style="display:block; margin-bottom: 2px;">📋 Anteckningar & Logg:</b>
           ${formattedNotes}
@@ -594,7 +595,7 @@
           
           ${notesHtml}
 
-          <button onclick="appendQuickNote('${id}')" style="width: 100%; background: #28a745; color: white; border: none; padding: 5px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 4px; margin-bottom: 6px;">➕ Lägg till anteckning</button>
+          <button onclick="appendQuickNote('${id}')" style="width: 100%; background: #28a745; color: white; border: none; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 6px; margin-bottom: 6px;">➕ Lägg till anteckning</button>
 
           <a href="${mapsUrl}" target="_blank" style="display: block; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 5px; border-radius: 4px; font-weight: bold; font-size: 12px; margin-bottom: 6px;">🚗 Hitta hit (Google Maps)</a>
           
@@ -609,13 +610,13 @@
       return marker;
     }
 
-    // Funktion för att snabbt lägga till en extra anteckning med tidsstämpel utan att öppna redigera-modalen
+    // Snabb-anteckning
     window.appendQuickNote = function(id) {
-      const item = savedStores.find(s => s.id === id);
+      const item = savedStores.find(s => String(s.id) === String(id));
       if (!item) return;
 
-      const techName = prompt("Ditt namn/tekniker (t.ex. Ibbe):", item.technician || "") || "Okänd tekniker";
-      const newNoteText = prompt("Skriv din nya anteckning här:");
+      const techName = prompt("Ditt namn/tekniker:", item.technician || "") || "Tekniker";
+      const newNoteText = prompt("Skriv din nya anteckning:");
 
       if (!newNoteText || !newNoteText.trim()) return;
 
@@ -624,9 +625,8 @@
       
       const entry = `• [${timeStr} - ${techName.trim()}]: ${newNoteText.trim()}`;
 
-      // Lägg till den nya anteckningen överst i listan
       if (item.notes && item.notes.trim()) {
-        item.notes = entry + "\n" + item.notes;
+        item.notes = entry + "\n" + item.notes.trim();
       } else {
         item.notes = entry;
       }
@@ -634,7 +634,6 @@
       localStorage.setItem('myInstalledStoresCache', JSON.stringify(savedStores));
       renderMarkers();
 
-      // Synka uppdateringen till Google Sheets
       fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
@@ -654,7 +653,7 @@
         let displayBrand = store.brand;
         if (displayBrand === "T.Hansen") displayBrand = "Thansen";
 
-        const m = createCustomMarker(store.id, store.lat, store.lng, displayBrand, store.city, store.installType, store.technician, store.customName, store.notes, store.noteLog, store.hardwareBrand);
+        const m = createCustomMarker(store);
         activeMarkers.push({ 
           id: store.id, 
           brand: displayBrand, 
@@ -790,7 +789,7 @@
     }
 
     window.editMarker = function(id) {
-      const item = savedStores.find(s => s.id === id);
+      const item = savedStores.find(s => String(s.id) === String(id));
       if (!item) return;
 
       pendingCoords = { lat: item.lat, lng: item.lng };
@@ -876,7 +875,7 @@
       const notes = document.getElementById('modalNotes').value.trim();
 
       if (editId) {
-        const index = savedStores.findIndex(s => s.id === editId);
+        const index = savedStores.findIndex(s => String(s.id) === String(editId));
         if (index !== -1) {
           savedStores[index].brand = brand;
           savedStores[index].customName = customName;
@@ -913,7 +912,7 @@
 
       closeAddModal();
 
-      const storeToSave = savedStores.find(s => s.id === (editId || savedStores[savedStores.length - 1].id));
+      const storeToSave = savedStores.find(s => String(s.id) === String(editId || savedStores[savedStores.length - 1].id));
       fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
@@ -1012,7 +1011,7 @@
 
     window.removeMarker = function(id) {
       if (confirm("Vill du ta bort den här markeringen?")) {
-        savedStores = savedStores.filter(s => s.id !== id);
+        savedStores = savedStores.filter(s => String(s.id) !== String(id));
         localStorage.setItem('myInstalledStoresCache', JSON.stringify(savedStores));
         renderMarkers();
 
