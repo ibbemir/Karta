@@ -289,6 +289,18 @@
       text-align: center;
     }
 
+    /* Företag/POI ikon-stil */
+    .poi-icon {
+      background: #ffffff;
+      border: 1px solid #888;
+      border-radius: 50%;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
+
     @media (max-width: 600px) {
       .search-container { top: 10px; left: 10px; right: 10px; max-width: none; }
       .info-box {
@@ -496,6 +508,7 @@
     let savedStores = JSON.parse(localStorage.getItem(CACHE_KEY)) || [];
     let searchMarker = null;
     let activeMarkers = [];
+    let poiLayerGroup = null;
     let pendingCoords = null;
     let activeTypeFilter = 'ALL';
 
@@ -534,13 +547,18 @@
 
       L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-      // Byt till OpenStreetMap Standard för att tydligt visa byggnader, hus och husnummer
+      // OpenStreetMap Standard för byggnader, hus och vägar
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
 
+      poiLayerGroup = L.layerGroup().addTo(map);
+
       map.on('click', function(e) { openAddModal(e.latlng.lat, e.latlng.lng); });
+
+      // Ladda företag/restauranger dynamiskt när man panorerar/zoomar in nära
+      map.on('moveend zoomend', handlePoiFetch);
 
       loadSavedStores();
     }
@@ -611,6 +629,9 @@
         displayName = store.brand + " – " + store.customName;
       }
 
+      // Hover Tooltip för installationer
+      marker.bindTooltip(displayName, { direction: 'top', offset: [0, -10] });
+
       const mapsUrl = "https://www.google.com/maps/dir/?api=1&destination=" + latNum + "," + lngNum;
 
       const hasNotes = store.notes && String(store.notes).trim() !== '';
@@ -638,6 +659,78 @@
 
       marker.bindPopup(popupContent);
       return marker;
+    }
+
+    // --- HÄMTA REASTAURANGER & FÖRETAG VIA OVERPASS API ---
+    let poiDebounceTimer = null;
+    function handlePoiFetch() {
+      if (!map) return;
+      if (map.getZoom() < 16) {
+        poiLayerGroup.clearLayers();
+        return;
+      }
+
+      clearTimeout(poiDebounceTimer);
+      poiDebounceTimer = setTimeout(fetchPoiPoints, 400);
+    }
+
+    function getPoiIconSymbol(tags) {
+      if (tags.amenity === 'restaurant' || tags.amenity === 'fast_food') return '🍴';
+      if (tags.amenity === 'cafe') return '☕';
+      if (tags.amenity === 'pub' || tags.amenity === 'bar') return '🍺';
+      if (tags.amenity === 'pharmacy') return '💊';
+      if (tags.amenity === 'fuel') return '⛽';
+      if (tags.shop) return '🛒';
+      if (tags.office || tags.craft) return '🏢';
+      return '🏢';
+    }
+
+    function fetchPoiPoints() {
+      const bounds = map.getBounds();
+      const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+
+      const query = `[out:json][timeout:10];
+        (
+          node["amenity"~"restaurant|fast_food|cafe|pub|bar|pharmacy|fuel"](${bbox});
+          node["shop"](${bbox});
+          node["office"](${bbox});
+        );
+        out body 60;`;
+
+      fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: 'data=' + encodeURIComponent(query)
+      })
+      .then(res => res.json())
+      .then(data => {
+        poiLayerGroup.clearLayers();
+        if (!data || !data.elements) return;
+
+        data.elements.forEach(el => {
+          if (!el.lat || !el.lon || !el.tags || !el.tags.name) return;
+
+          const name = el.tags.name;
+          const symbol = getPoiIconSymbol(el.tags);
+
+          const icon = L.divIcon({
+            html: `<div class="poi-icon">${symbol}</div>`,
+            className: '',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+          });
+
+          const poiMarker = L.marker([el.lat, el.lon], { icon: icon });
+
+          // Hover / Muspekare som visar namnet direkt!
+          poiMarker.bindTooltip(name, { direction: 'top', offset: [0, -8] });
+
+          const addBtnPopup = `<div style="font-size:12px;"><b>${name}</b><br><button onclick="openAddModal(${el.lat}, ${el.lon}, '', '${name.replace(/'/g, "\\'")}')" style="background:#28a745; color:white; border:none; padding:5px; border-radius:4px; font-weight:bold; cursor:pointer; margin-top:5px; width:100%;">➕ Lägg till installation</button></div>`;
+          poiMarker.bindPopup(addBtnPopup);
+
+          poiLayerGroup.addLayer(poiMarker);
+        });
+      })
+      .catch(err => console.log('POI fetch skipped:', err));
     }
 
     window.openQuickNoteModal = function(id) {
