@@ -487,7 +487,7 @@
   <script>
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz8-AmljzLJ1k23vVAKuHarQQKX_5jmpNBh6jjOXsJKpSsi504PXjj8_z8Ni8QWsPEF/exec";
     const APP_PASSWORD = "Seesafe2026";
-    const CACHE_KEY = "myInstalledStoresCache_v10";
+    const CACHE_KEY = "myInstalledStoresCache_v11";
 
     let map = null;
     let savedStores = JSON.parse(localStorage.getItem(CACHE_KEY)) || [];
@@ -845,6 +845,16 @@
         .catch(err => console.error("Kunde inte synka med Google Sheets:", err));
     }
 
+    function handleCategoryChange() {
+      const val = document.getElementById('modalCategory').value;
+      document.getElementById('customBrandGroup').style.display = (val === 'CUSTOM') ? 'block' : 'none';
+    }
+
+    function handleInstallTypeChange() {
+      const val = document.getElementById('modalInstallType').value;
+      document.getElementById('customTypeGroup').style.display = (val === 'CUSTOM_TYPE') ? 'block' : 'none';
+    }
+
     function openAddModal(lat, lng, defaultCity = "") {
       pendingCoords = { lat: parseCoord(lat), lng: parseCoord(lng) };
       document.getElementById('editingId').value = '';
@@ -858,9 +868,15 @@
       document.getElementById('modalHardwareBrand').value = '';
       document.getElementById('modalTechnician').value = '';
       document.getElementById('modalNotes').value = '';
+
       handleCategoryChange();
       handleInstallTypeChange();
+
       document.getElementById('addModal').style.display = 'flex';
+    }
+
+    function closeAddModal() {
+      document.getElementById('addModal').style.display = 'none';
     }
 
     window.editMarker = function(id) {
@@ -868,27 +884,31 @@
       if (!item) return;
 
       pendingCoords = { lat: parseCoord(item.lat), lng: parseCoord(item.lng) };
-      document.getElementById('editingId').value = item.id;
+      document.getElementById('editingId').value = id;
       document.getElementById('modalTitle').textContent = '✏️ Redigera installation';
 
-      const stdCats = ["Jysk", "Normal", "Rusta", "Dollarstore", "Thansen", "Granngården", "Privatpersoner", "Övriga företag"];
-      if (stdCats.includes(item.brand)) {
-        document.getElementById('modalCategory').value = item.brand;
+      const catSelect = document.getElementById('modalCategory');
+      const standardCategories = ["Jysk", "Normal", "Rusta", "Dollarstore", "Thansen", "Granngården", "Privatpersoner", "Övriga företag"];
+
+      if (standardCategories.includes(item.brand)) {
+        catSelect.value = item.brand;
         document.getElementById('modalCustomBrand').value = '';
       } else {
-        document.getElementById('modalCategory').value = 'CUSTOM';
+        catSelect.value = 'CUSTOM';
         document.getElementById('modalCustomBrand').value = item.brand || '';
       }
 
-      document.getElementById('modalName').value = item.customName || item.costumName || '';
+      document.getElementById('modalName').value = item.customName || '';
       document.getElementById('modalCity').value = item.city || '';
 
-      const stdTypes = ["Larm", "Kamera", "Passer", "Lås", "Larm & Kamera", "Larm & Passer", "Kamera & Passer", "Passer & Lås", "Komplett (Larm, Kamera, Passer & Lås)"];
-      if (stdTypes.includes(item.installType)) {
-        document.getElementById('modalInstallType').value = item.installType;
+      const typeSelect = document.getElementById('modalInstallType');
+      const standardTypes = ["Larm", "Kamera", "Passer", "Lås", "Larm & Kamera", "Larm & Passer", "Kamera & Passer", "Passer & Lås", "Komplett (Larm, Kamera, Passer & Lås)"];
+
+      if (standardTypes.includes(item.installType)) {
+        typeSelect.value = item.installType;
         document.getElementById('modalCustomInstallType').value = '';
       } else {
-        document.getElementById('modalInstallType').value = 'CUSTOM_TYPE';
+        typeSelect.value = 'CUSTOM_TYPE';
         document.getElementById('modalCustomInstallType').value = item.installType || '';
       }
 
@@ -898,217 +918,172 @@
 
       handleCategoryChange();
       handleInstallTypeChange();
+
       document.getElementById('addModal').style.display = 'flex';
     };
 
-    function closeAddModal() {
-      document.getElementById('addModal').style.display = 'none';
-      pendingCoords = null;
-    }
-
-    function handleCategoryChange() {
-      const catElem = document.getElementById('modalCategory');
-      const customGroup = document.getElementById('customBrandGroup');
-      if (catElem && customGroup) {
-        customGroup.style.display = (catElem.value === 'CUSTOM') ? 'block' : 'none';
-      }
-    }
-
-    function handleInstallTypeChange() {
-      const typeElem = document.getElementById('modalInstallType');
-      const customGroup = document.getElementById('customTypeGroup');
-      if (typeElem && customGroup) {
-        customGroup.style.display = (typeElem.value === 'CUSTOM_TYPE') ? 'block' : 'none';
-      }
-    }
-
     function saveNewInstallation() {
-      try {
-        if (!pendingCoords) {
-          alert("Ingen plats markerad på kartan.");
-          return;
-        }
+      if (!pendingCoords) return;
 
-        const editId = document.getElementById('editingId').value;
-        const catSelect = document.getElementById('modalCategory').value;
-        let brand = catSelect;
-        if (catSelect === 'CUSTOM') {
-          const customBrandElem = document.getElementById('modalCustomBrand');
-          brand = (customBrandElem && customBrandElem.value.trim()) ? customBrandElem.value.trim() : 'Övriga företag';
-        }
-
-        const customNameElem = document.getElementById('modalName');
-        const customName = customNameElem ? customNameElem.value.trim() : '';
-
-        const cityElem = document.getElementById('modalCity');
-        const city = cityElem ? cityElem.value.trim() : '';
-        
-        const typeSelect = document.getElementById('modalInstallType').value;
-        let installType = typeSelect;
-        if (typeSelect === 'CUSTOM_TYPE') {
-          const customTypeElem = document.getElementById('modalCustomInstallType');
-          installType = (customTypeElem && customTypeElem.value.trim()) ? customTypeElem.value.trim() : 'Ej angivet';
-        }
-
-        const hardwareElem = document.getElementById('modalHardwareBrand');
-        const hardwareBrand = hardwareElem ? hardwareElem.value.trim() : '';
-
-        const techElem = document.getElementById('modalTechnician');
-        const technician = techElem ? techElem.value.trim() : '';
-
-        const notesElem = document.getElementById('modalNotes');
-        const notes = notesElem ? notesElem.value.trim() : '';
-
-        let actionType = 'add';
-
-        if (editId) {
-          actionType = 'edit';
-          const index = savedStores.findIndex(s => String(s.id) === String(editId));
-          if (index !== -1) {
-            savedStores[index].brand = brand;
-            savedStores[index].customName = customName;
-            savedStores[index].city = city;
-            savedStores[index].installType = installType;
-            savedStores[index].hardwareBrand = hardwareBrand;
-            savedStores[index].technician = technician;
-            savedStores[index].notes = notes;
-          }
-        } else {
-          const newStore = {
-            id: Date.now().toString(),
-            lat: pendingCoords.lat,
-            lng: pendingCoords.lng,
-            brand: brand,
-            customName: customName,
-            city: city,
-            installType: installType,
-            hardwareBrand: hardwareBrand,
-            technician: technician,
-            notes: notes
-          };
-          savedStores.push(newStore);
-        }
-
-        localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
-        renderMarkers();
-
-        if (searchMarker) {
-          map.removeLayer(searchMarker);
-          searchMarker = null;
-        }
-
-        closeAddModal();
-
-        const storeToSave = savedStores.find(s => String(s.id) === String(editId || savedStores[savedStores.length - 1].id));
-        sendToGoogleSheets(actionType, storeToSave);
-
-      } catch (err) {
-        alert("Fel vid sparande: " + err.message);
-        console.error(err);
+      const editId = document.getElementById('editingId').value;
+      
+      let brand = document.getElementById('modalCategory').value;
+      if (brand === 'CUSTOM') {
+        brand = document.getElementById('modalCustomBrand').value.trim() || 'Övriga företag';
       }
+
+      let installType = document.getElementById('modalInstallType').value;
+      if (installType === 'CUSTOM_TYPE') {
+        installType = document.getElementById('modalCustomInstallType').value.trim() || 'Övrigt';
+      }
+
+      const customName = document.getElementById('modalName').value.trim();
+      const city = document.getElementById('modalCity').value.trim();
+      const hardwareBrand = document.getElementById('modalHardwareBrand').value.trim();
+      const technician = document.getElementById('modalTechnician').value.trim();
+      const notes = document.getElementById('modalNotes').value.trim();
+
+      let storeObj = null;
+
+      if (editId) {
+        storeObj = savedStores.find(s => String(s.id) === String(editId));
+        if (storeObj) {
+          storeObj.brand = brand;
+          storeObj.customName = customName;
+          storeObj.city = city;
+          storeObj.installType = installType;
+          storeObj.hardwareBrand = hardwareBrand;
+          storeObj.technician = technician;
+          storeObj.notes = notes;
+        }
+      } else {
+        storeObj = {
+          id: Date.now().toString(),
+          lat: pendingCoords.lat,
+          lng: pendingCoords.lng,
+          brand: brand,
+          customName: customName,
+          city: city,
+          installType: installType,
+          hardwareBrand: hardwareBrand,
+          technician: technician,
+          notes: notes
+        };
+        savedStores.push(storeObj);
+      }
+
+      localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
+      closeAddModal();
+      renderMarkers();
+
+      sendToGoogleSheets(editId ? 'edit' : 'add', storeObj);
+    }
+
+    window.removeMarker = function(id) {
+      if (!confirm("Är du säker på att du vill ta bort denna installation?")) return;
+
+      const item = savedStores.find(s => String(s.id) === String(id));
+      savedStores = savedStores.filter(s => String(s.id) !== String(id));
+      localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
+      renderMarkers();
+
+      if (item) {
+        sendToGoogleSheets('delete', item);
+      }
+    };
+
+    function performSearch() {
+      const query = document.getElementById('searchInput').value.trim();
+      if (!query) return;
+
+      fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query))
+        .then(res => res.json())
+        .then(results => {
+          if (results && results.length > 0) {
+            const first = results[0];
+            const lat = parseFloat(first.lat);
+            const lon = parseFloat(first.lon);
+
+            map.setView([lat, lon], 14);
+
+            if (searchMarker) map.removeLayer(searchMarker);
+
+            searchMarker = L.marker([lat, lon]).addTo(map);
+            searchMarker.bindPopup('<b>Sökresultat:</b><br>' + first.display_name + '<br><br><button onclick="openAddModal(' + lat + ',' + lon + ')" style="background:#28a745; color:white; border:none; padding:6px; border-radius:4px; font-weight:bold; cursor:pointer; width:100%;">➕ Lägg till installation här</button>').openPopup();
+
+            document.getElementById('suggestions').style.display = 'none';
+          } else {
+            alert('Hittade ingen plats med det namnet.');
+          }
+        })
+        .catch(err => console.error('Sökfel:', err));
+    }
+
+    function fetchSuggestions() {
+      const query = document.getElementById('searchInput').value.trim();
+      const list = document.getElementById('suggestions');
+
+      if (query.length < 3) {
+        list.style.display = 'none';
+        return;
+      }
+
+      fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query) + '&limit=5')
+        .then(res => res.json())
+        .then(results => {
+          list.innerHTML = '';
+          if (results && results.length > 0) {
+            results.forEach(res => {
+              const li = document.createElement('li');
+              li.textContent = res.display_name;
+              li.onclick = () => {
+                document.getElementById('searchInput').value = res.display_name;
+                list.style.display = 'none';
+                performSearch();
+              };
+              list.appendChild(li);
+            });
+            list.style.display = 'block';
+          } else {
+            list.style.display = 'none';
+          }
+        })
+        .catch(() => { list.style.display = 'none'; });
     }
 
     function exportToCSV() {
       if (savedStores.length === 0) {
-        alert("Det finns inga installationer att exportera ännu.");
+        alert("Inga installationer att exportera.");
         return;
       }
 
       let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
-      csvContent += "Kategori/Kedja,Namn,Stad,Installationstyp,Märke/Fabrikat,Tekniker,Anteckningar,Latitud,Longitud\n";
+      csvContent += "ID;Kategori;Namn;Stad;Installationstyp;Fabrikat;Tekniker;Latitud;Longitud;Anteckningar\n";
 
       savedStores.forEach(s => {
         const row = [
-          `"${s.brand || ''}"`,
-          `"${s.customName || s.costumName || ''}"`,
-          `"${s.city || ''}"`,
-          `"${s.installType || ''}"`,
-          `"${s.hardwareBrand || ''}"`,
-          `"${s.technician || ''}"`,
-          `"${(s.notes || '').replace(/"/g, '""')}"`,
-          `"${s.lat}"`,
-          `"${s.lng}"`
-        ];
-        csvContent += row.join(",") + "\n";
+          s.id || '',
+          s.brand || '',
+          s.customName || '',
+          s.city || '',
+          s.installType || '',
+          s.hardwareBrand || '',
+          s.technician || '',
+          s.lat || '',
+          s.lng || '',
+          '"' + (s.notes || '').replace(/"/g, '""') + '"'
+        ].join(';');
+        csvContent += row + "\n";
       });
 
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `Installationer_Seesafe_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute("download", "installationer_export.csv");
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     }
-
-    let searchTimeout = null;
-    function fetchSuggestions() {
-      const input = document.getElementById('searchInput').value;
-      const suggestionsList = document.getElementById('suggestions');
-      clearTimeout(searchTimeout);
-      if (input.length < 3) { suggestionsList.style.display = 'none'; return; }
-
-      searchTimeout = setTimeout(() => {
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(input)}&addressdetails=1&limit=5`)
-          .then(res => res.json())
-          .then(data => {
-            suggestionsList.innerHTML = '';
-            if (data.length === 0) { suggestionsList.style.display = 'none'; return; }
-            data.forEach(place => {
-              const city = (place.address && (place.address.city || place.address.town || place.address.village)) || "";
-              const li = document.createElement('li');
-              li.textContent = place.display_name;
-              li.onclick = () => showSearchPoint(parseFloat(place.lat), parseFloat(place.lon), place.display_name, city);
-              suggestionsList.appendChild(li);
-            });
-            suggestionsList.style.display = 'block';
-          });
-      }, 300);
-    }
-
-    function performSearch() {
-      const query = document.getElementById('searchInput').value;
-      if (!query) return;
-      document.getElementById('suggestions').style.display = 'none';
-      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`)
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.length > 0) {
-            const place = data[0];
-            const city = (place.address && (place.address.city || place.address.town || place.address.village)) || "";
-            showSearchPoint(parseFloat(place.lat), parseFloat(place.lon), place.display_name, city);
-          } else { alert("Hittade ingen plats."); }
-        });
-    }
-
-    function showSearchPoint(lat, lng, displayName, city) {
-      document.getElementById('suggestions').style.display = 'none';
-      document.getElementById('searchInput').value = displayName;
-      if (searchMarker) map.removeLayer(searchMarker);
-      map.setView([lat, lng], 16);
-      searchMarker = L.circleMarker([lat, lng], { radius: 10, fillColor: "#8a2be2", color: "#ffffff", weight: 3, opacity: 1, fillOpacity: 0.9 }).addTo(map);
-      searchMarker.bindPopup(`<div style="font-size: 13px;"><b>Sökt plats:</b><br>${displayName}<br><br><button onclick="openAddModal(${lat}, ${lng}, '${city.replace(/'/g, "\\'")}')" style="background:#28a745; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; width: 100%;">+ Spara installation här</button></div>`).openPopup();
-    }
-
-    document.addEventListener('click', function(e) {
-      if (!e.target.closest('.search-container')) { document.getElementById('suggestions').style.display = 'none'; }
-    });
-
-    window.removeMarker = function(id) {
-      if (confirm("Vill du ta bort den här markeringen?")) {
-        savedStores = savedStores.filter(s => String(s.id) !== String(id));
-        localStorage.setItem(CACHE_KEY, JSON.stringify(savedStores));
-        renderMarkers();
-
-        fetch(GOOGLE_SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'delete', id: id })
-        });
-      }
-    };
   </script>
-
 </body>
 </html>
