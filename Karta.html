@@ -289,7 +289,6 @@
       text-align: center;
     }
 
-    /* Företag/POI ikon-stil */
     .poi-icon {
       background: #ffffff;
       border: 1px solid #888;
@@ -547,7 +546,6 @@
 
       L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-      // OpenStreetMap Standard för byggnader, hus och vägar
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors'
@@ -556,8 +554,6 @@
       poiLayerGroup = L.layerGroup().addTo(map);
 
       map.on('click', function(e) { openAddModal(e.latlng.lat, e.latlng.lng); });
-
-      // Ladda företag/restauranger dynamiskt när man panorerar/zoomar in nära
       map.on('moveend zoomend', handlePoiFetch);
 
       loadSavedStores();
@@ -629,7 +625,6 @@
         displayName = store.brand + " – " + store.customName;
       }
 
-      // Hover Tooltip för installationer
       marker.bindTooltip(displayName, { direction: 'top', offset: [0, -10] });
 
       const mapsUrl = "https://www.google.com/maps/dir/?api=1&destination=" + latNum + "," + lngNum;
@@ -661,7 +656,6 @@
       return marker;
     }
 
-    // --- HÄMTA REASTAURANGER & FÖRETAG VIA OVERPASS API ---
     let poiDebounceTimer = null;
     function handlePoiFetch() {
       if (!map) return;
@@ -720,8 +714,6 @@
           });
 
           const poiMarker = L.marker([el.lat, el.lon], { icon: icon });
-
-          // Hover / Muspekare som visar namnet direkt!
           poiMarker.bindTooltip(name, { direction: 'top', offset: [0, -8] });
 
           const addBtnPopup = `<div style="font-size:12px;"><b>${name}</b><br><button onclick="openAddModal(${el.lat}, ${el.lon}, '', '${name.replace(/'/g, "\\'")}')" style="background:#28a745; color:white; border:none; padding:5px; border-radius:4px; font-weight:bold; cursor:pointer; margin-top:5px; width:100%;">➕ Lägg till installation</button></div>`;
@@ -1088,7 +1080,7 @@
       const lon = parseFloat(item.lon || item.lng);
       if (isNaN(lat) || isNaN(lon)) return;
 
-      map.setView([lat, lon], 17);
+      map.setView([lat, lon], 18); // Zoomar in nära så husnumret syns direkt
 
       if (searchMarker) map.removeLayer(searchMarker);
 
@@ -1111,14 +1103,33 @@
       document.getElementById('suggestions').style.display = 'none';
     }
 
+    // SPECIALFUNKTION FÖR ADRESSER MED HUSNUMMER
+    function parseAddressComponents(query) {
+      const match = query.match(/^(.+?)\s+(\d+\s*[a-zA-Z]?)(?:\s+(.+))?$/);
+      if (match) {
+        return {
+          street: match[1].trim(),
+          housenumber: match[2].trim(),
+          city: match[3] ? match[3].trim() : ''
+        };
+      }
+      return null;
+    }
+
     function searchGeocode(query) {
       const cleanQuery = query.trim();
       if (!cleanQuery) return Promise.resolve([]);
 
-      const url1 = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=' + encodeURIComponent(cleanQuery);
-      const url2 = 'https://photon.komoot.io/api/?limit=5&q=' + encodeURIComponent(cleanQuery);
+      const parsed = parseAddressComponents(cleanQuery);
+      
+      let primaryUrl = '';
+      if (parsed) {
+        primaryUrl = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&street=' + encodeURIComponent(parsed.housenumber + ' ' + parsed.street) + (parsed.city ? '&city=' + encodeURIComponent(parsed.city) : '');
+      } else {
+        primaryUrl = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=' + encodeURIComponent(cleanQuery);
+      }
 
-      return fetch(url1)
+      return fetch(primaryUrl)
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data) && data.length > 0) {
@@ -1131,21 +1142,20 @@
               return { lat, lon, city, name, displayTitle: res.display_name };
             });
           }
-          return fetch(url2)
+          
+          // Sekundär sökning om första missar
+          const fallbackUrl = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=' + encodeURIComponent(cleanQuery);
+          return fetch(fallbackUrl)
             .then(res => res.json())
-            .then(photonData => {
-              if (photonData && photonData.features && photonData.features.length > 0) {
-                return photonData.features.map(feat => {
-                  const coords = feat.geometry ? feat.geometry.coordinates : [0, 0];
-                  const props = feat.properties || {};
-                  const name = props.name || props.street || cleanQuery;
-                  const city = props.city || props.town || props.district || '';
-                  const street = props.street || '';
-                  const housenumber = props.housenumber || '';
-                  let title = name;
-                  if (street && !title.includes(street)) title += ', ' + street + (housenumber ? ' ' + housenumber : '');
-                  if (city && !title.includes(city)) title += ' (' + city + ')';
-                  return { lat: coords[1], lon: coords[0], city, name, displayTitle: title };
+            .then(fbData => {
+              if (Array.isArray(fbData) && fbData.length > 0) {
+                return fbData.map(res => {
+                  const lat = parseFloat(res.lat);
+                  const lon = parseFloat(res.lon);
+                  const addr = res.address || {};
+                  const city = addr.city || addr.town || addr.municipality || addr.village || '';
+                  const name = res.display_name ? res.display_name.split(',')[0] : cleanQuery;
+                  return { lat, lon, city, name, displayTitle: res.display_name };
                 });
               }
               return [];
@@ -1162,7 +1172,7 @@
         if (results && results.length > 0) {
           selectPlaceResult(results[0]);
         } else {
-          alert('Hittade ingen plats eller adress för "' + query + '". Försök igen med ex. "Sandvångsgatan 12 Landskrona".');
+          alert('Hittade ingen plats eller adress för "' + query + '". Försök t.ex. "Sandvångsgatan 12 Landskrona".');
         }
       });
     }
