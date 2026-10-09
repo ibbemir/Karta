@@ -427,7 +427,7 @@
 
   <div class="search-container">
     <div class="search-box">
-      <input type="text" id="searchInput" placeholder="Sök adress, tekniker, modell, typ..." oninput="handleSearchInput()" onkeypress="if(event.key === 'Enter') performSearch()">
+      <input type="text" id="searchInput" placeholder="Sök adress eller stad..." oninput="fetchSuggestions()" onkeypress="if(event.key === 'Enter') performSearch()">
       <button onclick="performSearch()">Sök</button>
     </div>
     <ul id="suggestions" class="suggestions-list"></ul>
@@ -806,15 +806,12 @@
 
     function filterStores() {
       const selectedStore = document.getElementById('storeFilter').value;
-      const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
 
       activeMarkers.forEach(item => {
         const matchesBrand = (selectedStore === 'ALL' || item.brand === selectedStore);
         const matchesType = (activeTypeFilter === 'ALL' || item.installType.toLowerCase().includes(activeTypeFilter));
-        const fullText = (item.brand + ' ' + item.customName + ' ' + item.city + ' ' + item.installType + ' ' + item.hardwareBrand + ' ' + item.technician + ' ' + item.notes).toLowerCase();
-        const matchesSearch = (!searchVal || fullText.includes(searchVal));
 
-        if (matchesBrand && matchesType && matchesSearch) {
+        if (matchesBrand && matchesType) {
           map.addLayer(item.layer);
         } else {
           map.removeLayer(item.layer);
@@ -823,7 +820,6 @@
     }
 
     function handleSearchInput() {
-      filterStores();
       fetchSuggestions();
     }
 
