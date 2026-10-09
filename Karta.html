@@ -430,7 +430,7 @@
 
   <div class="search-container">
     <div class="search-box">
-      <input type="text" id="searchInput" placeholder="Sök företag, gatuadress nr, stad..." oninput="fetchSuggestions()" onkeypress="if(event.key === 'Enter') performSearch()">
+      <input type="text" id="searchInput" placeholder="Sök företag, adress med nr, stad..." oninput="fetchSuggestions()" onkeypress="if(event.key === 'Enter') performSearch()">
       <button onclick="performSearch()">Sök</button>
     </div>
     <ul id="suggestions" class="suggestions-list"></ul>
@@ -987,40 +987,12 @@
       }
     };
 
-    function parseFeatureData(feat) {
-      if (!feat || !feat.geometry || !feat.geometry.coordinates) return null;
+    function selectPlaceResult(item) {
+      if (!item) return;
 
-      const lon = feat.geometry.coordinates[0];
-      const lat = feat.geometry.coordinates[1];
-      const props = feat.properties || {};
-
-      const name = props.name || '';
-      const city = props.city || props.town || props.district || props.county || '';
-      const street = props.street || '';
-      const housenumber = props.housenumber || '';
-
-      let addressText = '';
-      if (street) {
-        addressText = street + (housenumber ? ' ' + housenumber : '');
-      }
-
-      let displayTitle = name;
-      if (addressText) {
-        if (!displayTitle) displayTitle = addressText;
-        else if (!displayTitle.includes(addressText)) displayTitle += ', ' + addressText;
-      }
-      if (city && !displayTitle.includes(city)) {
-        displayTitle += (displayTitle ? ', ' : '') + city;
-      }
-
-      return { lat, lon, name: name || addressText || 'Vald plats', city, displayTitle: displayTitle || 'Vald plats' };
-    }
-
-    function selectPlaceResult(itemData) {
-      if (!itemData) return;
-
-      const lat = itemData.lat;
-      const lon = itemData.lon;
+      const lat = parseFloat(item.lat);
+      const lon = parseFloat(item.lon || item.lng);
+      if (isNaN(lat) || isNaN(lon)) return;
 
       map.setView([lat, lon], 16);
 
@@ -1030,13 +1002,13 @@
       
       const popupDiv = document.createElement('div');
       popupDiv.style.cssText = 'font-size: 13px; max-width: 220px;';
-      popupDiv.innerHTML = '<b>Sökresultat:</b><br>' + itemData.displayTitle;
+      popupDiv.innerHTML = '<b>Sökresultat:</b><br>' + (item.displayTitle || 'Vald plats');
 
       const addBtn = document.createElement('button');
       addBtn.style.cssText = 'background:#28a745; color:white; border:none; padding:6px; border-radius:4px; font-weight:bold; cursor:pointer; width:100%; margin-top:8px;';
       addBtn.textContent = '➕ Lägg till installation här';
       addBtn.onclick = function() {
-        openAddModal(lat, lon, itemData.city, itemData.name);
+        openAddModal(lat, lon, item.city || '', item.name || '');
       };
 
       popupDiv.appendChild(addBtn);
@@ -1045,31 +1017,60 @@
       document.getElementById('suggestions').style.display = 'none';
     }
 
+    function searchGeocode(query) {
+      const cleanQuery = query.trim();
+      if (!cleanQuery) return Promise.resolve([]);
+
+      const url1 = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=' + encodeURIComponent(cleanQuery);
+      const url2 = 'https://photon.komoot.io/api/?limit=5&q=' + encodeURIComponent(cleanQuery);
+
+      return fetch(url1)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            return data.map(res => {
+              const lat = parseFloat(res.lat);
+              const lon = parseFloat(res.lon);
+              const addr = res.address || {};
+              const city = addr.city || addr.town || addr.municipality || addr.village || '';
+              const name = res.display_name ? res.display_name.split(',')[0] : cleanQuery;
+              return { lat, lon, city, name, displayTitle: res.display_name };
+            });
+          }
+          return fetch(url2)
+            .then(res => res.json())
+            .then(photonData => {
+              if (photonData && photonData.features && photonData.features.length > 0) {
+                return photonData.features.map(feat => {
+                  const coords = feat.geometry ? feat.geometry.coordinates : [0, 0];
+                  const props = feat.properties || {};
+                  const name = props.name || props.street || cleanQuery;
+                  const city = props.city || props.town || props.district || '';
+                  const street = props.street || '';
+                  const housenumber = props.housenumber || '';
+                  let title = name;
+                  if (street && !title.includes(street)) title += ', ' + street + (housenumber ? ' ' + housenumber : '');
+                  if (city && !title.includes(city)) title += ' (' + city + ')';
+                  return { lat: coords[1], lon: coords[0], city, name, displayTitle: title };
+                });
+              }
+              return [];
+            });
+        })
+        .catch(() => []);
+    }
+
     function performSearch() {
       const query = document.getElementById('searchInput').value.trim();
       if (!query) return;
 
-      const searchUrl = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=' + encodeURIComponent(query) + '&countrycodes=se,dk,no';
-
-      fetch(searchUrl)
-        .then(res => res.json())
-        .then(results => {
-          if (results && results.length > 0) {
-            const first = results[0];
-            const lat = parseFloat(first.lat);
-            const lon = parseFloat(first.lon);
-            const city = first.address ? (first.address.city || first.address.town || first.address.municipality || '') : '';
-            const name = first.display_name.split(',')[0];
-            
-            selectPlaceResult({ lat, lon, city, name, displayTitle: first.display_name });
-          } else {
-            alert('Hittade ingen plats med det namnet. Prova t.ex. "Sandvångsgatan 12 Landskrona".');
-          }
-        })
-        .catch(err => {
-          console.error('Sökfel:', err);
-          alert('Ett fel uppstod vid sökningen.');
-        });
+      searchGeocode(query).then(results => {
+        if (results && results.length > 0) {
+          selectPlaceResult(results[0]);
+        } else {
+          alert('Hittade ingen plats eller adress för "' + query + '". Försök igen med ex. "Sandvångsgatan 12 Landskrona".');
+        }
+      });
     }
 
     let searchTimeout = null;
@@ -1084,33 +1085,23 @@
 
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => {
-        const searchUrl = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=' + encodeURIComponent(query) + '&countrycodes=se,dk,no';
-
-        fetch(searchUrl)
-          .then(res => res.json())
-          .then(results => {
-            list.innerHTML = '';
-            if (results && results.length > 0) {
-              results.forEach(res => {
-                const lat = parseFloat(res.lat);
-                const lon = parseFloat(res.lon);
-                const city = res.address ? (res.address.city || res.address.town || res.address.municipality || '') : '';
-                const name = res.display_name.split(',')[0];
-
-                const li = document.createElement('li');
-                li.textContent = res.display_name;
-                li.onclick = () => {
-                  document.getElementById('searchInput').value = name;
-                  selectPlaceResult({ lat, lon, city, name, displayTitle: res.display_name });
-                };
-                list.appendChild(li);
-              });
-              list.style.display = 'block';
-            } else {
-              list.style.display = 'none';
-            }
-          })
-          .catch(() => { list.style.display = 'none'; });
+        searchGeocode(query).then(results => {
+          list.innerHTML = '';
+          if (results && results.length > 0) {
+            results.forEach(res => {
+              const li = document.createElement('li');
+              li.textContent = res.displayTitle;
+              li.onclick = () => {
+                document.getElementById('searchInput').value = res.name;
+                selectPlaceResult(res);
+              };
+              list.appendChild(li);
+            });
+            list.style.display = 'block';
+          } else {
+            list.style.display = 'none';
+          }
+        });
       }, 300);
     }
 
