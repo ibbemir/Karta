@@ -205,7 +205,6 @@
       font-weight: bold;
     }
 
-    /* Växlare för kartvy */
     .map-type-switch {
       display: flex;
       gap: 4px;
@@ -481,7 +480,6 @@
     
     <div id="panelContent" class="panel-content">
       
-      <!-- Kartvy-väljare -->
       <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 4px;">Kartvy:</label>
       <div class="map-type-switch">
         <button id="btnMapStandard" class="map-type-btn active" onclick="switchTileLayer('standard')">🗺️ Standard</button>
@@ -546,7 +544,6 @@
     let pendingCoords = null;
     let activeTypeFilter = 'ALL';
 
-    // Lager för standard- och satellitkarta
     let standardTileLayer = null;
     let satelliteTileLayer = null;
 
@@ -581,18 +578,18 @@
     function initMap() {
       if (map) return;
 
-      map = L.map('map', { zoomControl: false }).setView([56.0, 13.5], 6);
+      // Maxzoom begränsad till 18 för att undvika fel på bildservrar
+      map = L.map('map', { zoomControl: false, maxZoom: 18 }).setView([56.0, 13.5], 6);
 
       L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-      // Skapa standard- och satellitlager
       standardTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
+        maxZoom: 18,
         attribution: '&copy; OpenStreetMap contributors'
       });
 
       satelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 19,
+        maxZoom: 18,
         attribution: 'Tiles &copy; Esri'
       });
 
@@ -1143,6 +1140,7 @@
       const lon = parseFloat(item.lon || item.lng);
       if (isNaN(lat) || isNaN(lon)) return;
 
+      // Zoom sänkt till 18 för perfekt skärpa utan grå rutor
       map.setView([lat, lon], 18);
 
       if (searchMarker) map.removeLayer(searchMarker);
