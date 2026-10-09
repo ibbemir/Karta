@@ -205,6 +205,33 @@
       font-weight: bold;
     }
 
+    /* Växlare för kartvy */
+    .map-type-switch {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 10px;
+      background: #e9ecef;
+      padding: 3px;
+      border-radius: 6px;
+    }
+    .map-type-btn {
+      flex: 1;
+      padding: 6px 4px;
+      font-size: 11px;
+      font-weight: bold;
+      border: none;
+      background: transparent;
+      color: #495057;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .map-type-btn.active {
+      background: #007bff;
+      color: white;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+
     .btn-export {
       width: 100%;
       background: #17a2b8;
@@ -453,6 +480,14 @@
     <button class="toggle-panel-btn" onclick="togglePanel()">📋 Visa/Dölj Filter & Meny</button>
     
     <div id="panelContent" class="panel-content">
+      
+      <!-- Kartvy-väljare -->
+      <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 4px;">Kartvy:</label>
+      <div class="map-type-switch">
+        <button id="btnMapStandard" class="map-type-btn active" onclick="switchTileLayer('standard')">🗺️ Standard</button>
+        <button id="btnMapSat" class="map-type-btn" onclick="switchTileLayer('satellite')">🛰️ Satellit</button>
+      </div>
+
       <div class="stats-container">
         <div class="stats-title">
           <span>📊 Statistik:</span>
@@ -511,6 +546,10 @@
     let pendingCoords = null;
     let activeTypeFilter = 'ALL';
 
+    // Lager för standard- och satellitkarta
+    let standardTileLayer = null;
+    let satelliteTileLayer = null;
+
     function checkPassword() {
       const input = document.getElementById('passwordInput').value;
       if (input === APP_PASSWORD) {
@@ -546,10 +585,18 @@
 
       L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      // Skapa standard- och satellitlager
+      standardTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
+      });
+
+      satelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+        attribution: 'Tiles &copy; Esri'
+      });
+
+      standardTileLayer.addTo(map);
 
       poiLayerGroup = L.layerGroup().addTo(map);
 
@@ -557,6 +604,22 @@
       map.on('moveend zoomend', handlePoiFetch);
 
       loadSavedStores();
+    }
+
+    function switchTileLayer(type) {
+      if (!map) return;
+
+      if (type === 'satellite') {
+        map.removeLayer(standardTileLayer);
+        map.addLayer(satelliteTileLayer);
+        document.getElementById('btnMapSat').classList.add('active');
+        document.getElementById('btnMapStandard').classList.remove('active');
+      } else {
+        map.removeLayer(satelliteTileLayer);
+        map.addLayer(standardTileLayer);
+        document.getElementById('btnMapStandard').classList.add('active');
+        document.getElementById('btnMapSat').classList.remove('active');
+      }
     }
 
     function togglePanel() {
@@ -1080,7 +1143,7 @@
       const lon = parseFloat(item.lon || item.lng);
       if (isNaN(lat) || isNaN(lon)) return;
 
-      map.setView([lat, lon], 18); // Zoomar in nära så husnumret syns direkt
+      map.setView([lat, lon], 18);
 
       if (searchMarker) map.removeLayer(searchMarker);
 
@@ -1103,7 +1166,6 @@
       document.getElementById('suggestions').style.display = 'none';
     }
 
-    // SPECIALFUNKTION FÖR ADRESSER MED HUSNUMMER
     function parseAddressComponents(query) {
       const match = query.match(/^(.+?)\s+(\d+\s*[a-zA-Z]?)(?:\s+(.+))?$/);
       if (match) {
@@ -1143,7 +1205,6 @@
             });
           }
           
-          // Sekundär sökning om första missar
           const fallbackUrl = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=' + encodeURIComponent(cleanQuery);
           return fetch(fallbackUrl)
             .then(res => res.json())
