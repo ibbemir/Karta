@@ -138,7 +138,7 @@
       border-radius: 8px; 
       box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
       margin-top: 4px; 
-      max-height: 200px; 
+      max-height: 250px; 
       overflow-y: auto; 
       display: none; 
       padding: 0; 
@@ -150,6 +150,9 @@
       cursor: pointer; 
       font-size: 13px; 
       color: #333; 
+    }
+    .suggestions-list li:hover {
+      background-color: #f8f9fa;
     }
 
     .info-box { 
@@ -343,12 +346,12 @@
 
       <div class="modal-field" id="customBrandGroup" style="display: none;">
         <label for="modalCustomBrand">Ange egen kedja/kategori:</label>
-        <input type="text" id="modalCustomBrand" placeholder="t.ex. Apotek...">
+        <input type="text" id="modalCustomBrand" placeholder="t.ex. Apotek, Santa Maria...">
       </div>
 
       <div class="modal-field">
         <label for="modalName">Namn / Företagsnamn (valfritt):</label>
-        <input type="text" id="modalName" placeholder="t.ex. Börje Jönsson, Jysk Syd...">
+        <input type="text" id="modalName" placeholder="t.ex. Börje Jönsson, Santa Maria Landskrona...">
       </div>
 
       <div class="modal-field">
@@ -427,7 +430,7 @@
 
   <div class="search-container">
     <div class="search-box">
-      <input type="text" id="searchInput" placeholder="Sök adress eller stad..." oninput="fetchSuggestions()" onkeypress="if(event.key === 'Enter') performSearch()">
+      <input type="text" id="searchInput" placeholder="Sök företag, adress eller stad..." oninput="fetchSuggestions()" onkeypress="if(event.key === 'Enter') performSearch()">
       <button onclick="performSearch()">Sök</button>
     </div>
     <ul id="suggestions" class="suggestions-list"></ul>
@@ -819,10 +822,6 @@
       });
     }
 
-    function handleSearchInput() {
-      fetchSuggestions();
-    }
-
     function loadSavedStores() {
       fetch(GOOGLE_SCRIPT_URL + "?t=" + Date.now())
         .then(res => res.json())
@@ -851,13 +850,13 @@
       document.getElementById('customTypeGroup').style.display = (val === 'CUSTOM_TYPE') ? 'block' : 'none';
     }
 
-    function openAddModal(lat, lng, defaultCity = "") {
+    function openAddModal(lat, lng, defaultCity = "", defaultName = "") {
       pendingCoords = { lat: parseCoord(lat), lng: parseCoord(lng) };
       document.getElementById('editingId').value = '';
       document.getElementById('modalTitle').textContent = '➕ Ny installation';
       document.getElementById('modalCategory').value = 'Jysk';
       document.getElementById('modalCustomBrand').value = '';
-      document.getElementById('modalName').value = '';
+      document.getElementById('modalName').value = defaultName;
       document.getElementById('modalCity').value = defaultCity;
       document.getElementById('modalInstallType').value = 'Larm';
       document.getElementById('modalCustomInstallType').value = '';
@@ -988,63 +987,93 @@
       }
     };
 
+    function selectPlaceResult(res) {
+      const lat = parseFloat(res.lat);
+      const lon = parseFloat(res.lon);
+      
+      const parts = (res.display_name || '').split(',');
+      const placeTitle = parts[0] ? parts[0].trim() : '';
+      let detectedCity = '';
+      
+      if (res.address) {
+        detectedCity = res.address.city || res.address.town || res.address.municipality || res.address.village || '';
+      }
+
+      map.setView([lat, lon], 16);
+
+      if (searchMarker) map.removeLayer(searchMarker);
+
+      searchMarker = L.marker([lat, lon]).addTo(map);
+      
+      const btn = document.createElement('button');
+      btn.style.cssText = 'background:#28a745; color:white; border:none; padding:6px; border-radius:4px; font-weight:bold; cursor:pointer; width:100%; margin-top:8px;';
+      btn.textContent = '➕ Lägg till installation här';
+      btn.onclick = function() {
+        openAddModal(lat, lon, detectedCity, placeTitle);
+      };
+
+      const container = document.createElement('div');
+      container.innerHTML = '<b>Sökresultat:</b><br>' + res.display_name + '<br>';
+      container.appendChild(btn);
+
+      searchMarker.bindPopup(container).openPopup();
+
+      document.getElementById('suggestions').style.display = 'none';
+    }
+
     function performSearch() {
       const query = document.getElementById('searchInput').value.trim();
       if (!query) return;
 
-      fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query))
+      const searchUrl = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=' + encodeURIComponent(query);
+
+      fetch(searchUrl)
         .then(res => res.json())
         .then(results => {
           if (results && results.length > 0) {
-            const first = results[0];
-            const lat = parseFloat(first.lat);
-            const lon = parseFloat(first.lon);
-
-            map.setView([lat, lon], 14);
-
-            if (searchMarker) map.removeLayer(searchMarker);
-
-            searchMarker = L.marker([lat, lon]).addTo(map);
-            searchMarker.bindPopup('<b>Sökresultat:</b><br>' + first.display_name + '<br><br><button onclick="openAddModal(' + lat + ',' + lon + ')" style="background:#28a745; color:white; border:none; padding:6px; border-radius:4px; font-weight:bold; cursor:pointer; width:100%;">➕ Lägg till installation här</button>').openPopup();
-
-            document.getElementById('suggestions').style.display = 'none';
+            selectPlaceResult(results[0]);
           } else {
-            alert('Hittade ingen plats med det namnet.');
+            alert('Hittade ingen plats eller företag med det namnet.');
           }
         })
         .catch(err => console.error('Sökfel:', err));
     }
 
+    let searchTimeout = null;
     function fetchSuggestions() {
       const query = document.getElementById('searchInput').value.trim();
       const list = document.getElementById('suggestions');
 
-      if (query.length < 3) {
+      if (query.length < 2) {
         list.style.display = 'none';
         return;
       }
 
-      fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query) + '&limit=5')
-        .then(res => res.json())
-        .then(results => {
-          list.innerHTML = '';
-          if (results && results.length > 0) {
-            results.forEach(res => {
-              const li = document.createElement('li');
-              li.textContent = res.display_name;
-              li.onclick = () => {
-                document.getElementById('searchInput').value = res.display_name;
-                list.style.display = 'none';
-                performSearch();
-              };
-              list.appendChild(li);
-            });
-            list.style.display = 'block';
-          } else {
-            list.style.display = 'none';
-          }
-        })
-        .catch(() => { list.style.display = 'none'; });
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        const searchUrl = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=' + encodeURIComponent(query);
+
+        fetch(searchUrl)
+          .then(res => res.json())
+          .then(results => {
+            list.innerHTML = '';
+            if (results && results.length > 0) {
+              results.forEach(res => {
+                const li = document.createElement('li');
+                li.textContent = res.display_name;
+                li.onclick = () => {
+                  document.getElementById('searchInput').value = res.display_name.split(',')[0];
+                  selectPlaceResult(res);
+                };
+                list.appendChild(li);
+              });
+              list.style.display = 'block';
+            } else {
+              list.style.display = 'none';
+            }
+          })
+          .catch(() => { list.style.display = 'none'; });
+      }, 300);
     }
 
     function exportToCSV() {
